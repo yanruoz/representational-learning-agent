@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+venv/
+.venv/
+
+# Secrets
+.env
+
+# Data, models, and run artifacts
+# Data files are fetched by run.sh; only each dataset's DATA_DESCRIPTION.md is tracked.
+data/*/*
+!data/*/DATA_DESCRIPTION.md
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+outputs/
+# Encoder embeddings made by the Longleaf jobs (large; synced by hand, not committed)
+cache/
+wandb/
+lightning_logs/
+
+# OS
+.DS_Store

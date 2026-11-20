@@ -1,0 +1,14 @@
+# Longleaf GPU environment (Linux, CUDA). The core packages match the Mac venv's pins.
+# The rest are not pinned yet: setup_longleaf.sh writes the exact installed versions to
+# requirements-gpu.lock.txt. Commit that file after the first successful install.
+torch==2.14.0
+numpy==2.5.3
+pandas==3.0.5
+scipy==1.18.1
+scikit-learn==1.9.1
+anndata==0.13.3.post0
+pyarrow
+pillow
+open_clip_torch
+transformers
+huggingface_hub
