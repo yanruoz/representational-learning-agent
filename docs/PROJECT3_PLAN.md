@@ -76,7 +76,7 @@ Source for reuse: `../gen-model-agent` (Project 2). Code is copied in, never imp
 | `downstream-use` | recommendation.json | What the embeddings can and cannot be used for; the `summary.json` contract for callers; verdict wording. |
 | `reporting` | findings.md | Reader-first structure, glossary, every number traced to an artifact, limitations required. |
 
-Critic `rep-critic` (sees objective, plan, metrics, run logs, figures only). Six checks: (1) does a metric test the success criterion, (2) baselines and chance references present and fair (same split, same dimensionality budget), (3) seed stability vs gaps, (4) training adequacy (loss still falling, temperature collapse, effective-rank collapse), (5) leakage (label-derived inputs, labels from a modality used as independent truth, test data in encoder pretraining or fine-tuning), (6) reasons that would read the same on any dataset.
+Critic `rep-critic` (sees objective, plan, metrics, run logs, figures only). Six checks: (1) does a metric test the success criterion, (2) baselines and chance references present and fair (same split, same dimensionality budget), (3) seed stability vs gaps, (4) training adequacy (loss still falling, temperature collapse, effective-rank collapse), (5) leakage: label-derived inputs; labels derived from a modality treated as independent truth; test data used in fine-tuning; and **pretraining overlap**, when the data description says the evaluation data may share a source with a pretrained encoder's training data. In that case the critic flags any conclusion that rests only on that encoder's zero-shot or fine-tuned numbers, and checks that a baseline with no pretraining is reported next to it. (6) Reasons that would read the same on any dataset. The critic learns about overlap only from `DATA_DESCRIPTION.md` and the cache manifest, so the critic prompt stays generic.
 
 ## 4. Method capability table (goes into `plan_schema.METHOD_CAPABILITIES`)
 
@@ -94,7 +94,26 @@ Validator rules: a task needs a method with the capability; `supervised_fusion` 
 ## 5. Objectives (one per dataset, chosen so they are plausibly met)
 
 - **pbmc_multiome** (report 1): *"Learn a joint RNA + ATAC cell embedding. Check whether it identifies cell types at least as well as the better single modality, and whether each modality can find the same cell in the other."* Success: on held-out cells, joint kNN macro-F1 ≥ best single-modality baseline minus the seed spread, and ATAC-to-RNA recall@10 well above chance (chance = 10 / number of held-out cells). Plausible because RNA alone is already strong and contrastive alignment of paired multiome cells is known to work at this scale. Risk: the labels came from a joint RNA+ATAC clustering, which favors the joint embedding; the data description says so and the agent should report it.
-- **rocov2** (report 2): *"Learn a shared image-caption embedding for radiology. Check whether a caption retrieves its own image among held-out pairs, and whether the image embedding separates imaging modality."* Success: text-to-image recall@10 on the held-out test pairs well above chance and at least the frozen-encoder zero-shot value; a linear probe on image embeddings beats the majority-class baseline for imaging modality. Risk: frozen BiomedCLIP may already be strong (and may have seen these figures), so a trained head might not beat it. "No gain over zero-shot" is then the honest result, and the chance comparison still holds.
+- **rocov2** (report 2): *"Learn image and caption representations of radiology figures that identify the imaging modality from the image. Check how much the caption adds, and how well captions retrieve their images."* Success: on the official test pairs, imaging-modality macro-F1 from the learned image (or joint) embedding is well above the majority-class baseline and above a baseline with no pretraining (downsampled-pixel PCA for images, TF-IDF + SVD for captions). Frozen BiomedCLIP (its linear probe and its zero-shot retrieval) is reported as a **strong reference, not the bar to beat**: the Longleaf smoke test gave 83% image-to-text top-1 within batches of 64 (chance 1.6%). Some of that is likely pretraining overlap, because ROCOv2 and BiomedCLIP's pretraining data both come from PubMed Central. Retrieval recall@k is reported against chance and against that reference, as a secondary result.
+
+**ROCOv2 modality labels** (derived by the loader from the concept list; see `data/rocov2/DATA_DESCRIPTION.md`). In this copy every row has 1 to 3 concepts. The first is always the manually curated modality concept, and no modality code ever appears in another position. Coverage in the subset (train / test / total):
+
+| Code | Modality | Train | Test | Total |
+|---|---|---|---|---|
+| C0040405 | CT | 3031 | 622 | 3653 |
+| C1306645 | Plain X-ray | 2513 | 428 | 2941 |
+| C0024485 | MRI | 1431 | 251 | 1682 |
+| C0041618 | Ultrasound | 1202 | 260 | 1462 |
+| C0002978 | Angiography | 589 | 72 | 661 |
+| C0032743 | PET | 47 | 5 | 52 |
+| `nan` (no code) | missing label | 71 | 17 | 88 |
+| | **all pairs** | **8884** | **1655** | **10539** |
+
+Rows with no modality code are kept for retrieval and left out of label metrics. PET has only 5 test pairs, so its per-class F1 is unstable; the agent should say so or merge it, and give a reason either way. Captions usually name the modality ("CT of the chest ..."), so caption-only or joint modality accuracy is close to trivial. Image-only results are the informative ones, and the report must say this.
+
+**Limitations to carry into report.pdf and both generated reports:**
+- Pretraining overlap: BiomedCLIP was trained on PubMed Central figure-caption pairs, the same source as ROCOv2, so some test pairs may have been seen in pretraining. Frozen and fine-tuned BiomedCLIP results can be inflated by this. The no-pretraining baselines are not affected.
+- PBMC labels come from a joint RNA+ATAC clustering, which favors joint embeddings.
 
 ## 6. Milestones
 

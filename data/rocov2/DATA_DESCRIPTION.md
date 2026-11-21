@@ -22,21 +22,28 @@ the 6 official test shards, so the official train/test split is kept.
 - Parquet files with four columns: `image` (encoded image bytes), `image_id`
   (e.g. `ROCOv2_2023_train_000001`), `caption` (free text), `cui` (list of
   UMLS concept codes).
-- The full official training split has 59,962 rows over 27 shards (about 2,200
-  per shard) and the test split 9,927 rows over 6 shards (about 1,650 per
-  shard), so this subset holds roughly 8,900 training and 1,650 test pairs.
-  Exact counts come from the profiler.
+- 10,539 pairs: 8,884 from the official training split and 1,655 from the
+  official test split. The shard name records the split.
 - About 2.4 GB in total.
 - Images vary in size, aspect ratio, and color mode (most are grayscale scans
   saved as image files). Captions vary from a few words to several sentences.
 
 ## Labels
-No single label column. According to the ROCOv2 paper, every image has a
-manually curated imaging-modality concept (for example C0040405 for X-ray
-computed tomography and C0041618 for ultrasonography), and X-ray images also
-have body-region and directionality concepts. The remaining concepts were
-extracted automatically from the caption. 1,947 distinct concepts appear in the
-full dataset.
+No single label column. Each row's `cui` list holds 1 to 3 UMLS concept codes.
+The first is the manually curated imaging-modality concept; for plain X-ray
+images, body-region and directionality concepts follow. In this copy the
+modality codes never appear in any other position. A few rows have the string
+`nan` instead of a modality code (no label).
+
+Modality concepts:
+- C0040405: X-ray computed tomography (CT)
+- C1306645: plain radiography (X-ray)
+- C0024485: magnetic resonance imaging (MRI)
+- C0041618: ultrasonography
+- C0002978: angiography
+- C0032743: positron emission tomography (PET)
+
+The loader turns these into a `modality` label (see `## Loading`).
 
 ## Known caveats
 - Captions are written by article authors, not radiologists, and often describe
