@@ -52,6 +52,21 @@ Both labels are declared in `data/rocov2/DATA_DESCRIPTION.md`, including breast.
 - "Do captions help": compare the same image encoder with and without caption-based training. The cleanest pair is DINOv2 (never trained on captions): frozen features vs a caption-aligned head trained on them. BiomedCLIP's image tower was itself trained with captions, so it is a reference, not a clean "no captions" condition.
 - Baselines: majority class; downsampled-pixel PCA (no pretraining).
 
+**Evidence already in the profile** (seeded sample of 3,000; near-duplicate = cosine ≥ 0.95; share of the 10 nearest neighbors that are near-duplicates, vs the share of random pairs above the cutoff):
+
+| Representation | kNN near-duplicates | Random pairs ≥ cutoff |
+|---|---|---|
+| caption, TF-IDF | 0.0014 | 0.0 |
+| image, BiomedCLIP | 0.0047 | 0.0 |
+| caption, BiomedCLIP | 0.0077 | 0.0001 |
+| image, DINOv2 | **0.1879** | 0.0053 |
+| (PBMC) RNA, PCA | 0.0067 | 0.0 |
+| (PBMC) ATAC, PCA | 0.0 | 0.0 |
+
+In DINOv2 space many images sit almost on top of each other (similar-looking scans), so a two-tower model built on DINOv2 features faces InfoNCE false negatives. That gives the agent a real reason to consider `vicreg`. In every other representation, near-duplicates are rare.
+
+**Frozen features are already strong for modality:** 1-NN leave-one-out accuracy on 252 test images is 0.956 (BiomedCLIP) and 0.948 (DINOv2), against 0.409 for the majority class. Captions may not help modality. Body region is where an effect is more likely.
+
 **What should count as success:** at 1% and 10% labels, a caption-trained image representation beats the same encoder's frozen features on modality macro-F1 by more than the seed spread. At 100% the gap may close; that is an acceptable, informative result. Risks: pretraining overlap for BiomedCLIP (PubMed Central), and the 1% body-region condition has very few labels.
 
 ## Run commands

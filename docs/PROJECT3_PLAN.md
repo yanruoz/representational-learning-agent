@@ -25,7 +25,7 @@ Source for reuse: `../gen-model-agent` (Project 2). Code is copied in, never imp
 | Step | Where | Why |
 |---|---|---|
 | PBMC: everything (HVG/LSI input, MLP encoders, all methods) | Mac, inside `run.sh` | Inputs are about 9.6k cells x a few thousand features. Small MLPs train in minutes on MPS. No pretrained encoder needed. |
-| ROCOv2: frozen BiomedCLIP image and text embeddings (10,539 pairs) | Longleaf GPU job (`longleaf/extract_embeddings.sbatch`), copied back to `cache/rocov2/` | The same script runs on MPS: `run.sh` calls `scripts/extract_embeddings.py --if-missing` before the agent starts, measured at about 8 minutes for all pairs (256 pairs in 11.5 s). Graders without Longleaf get the same cache. The MPS output matches the CUDA smoke test (83% in-batch top-1 on the first 64 test pairs). |
+| ROCOv2: frozen BiomedCLIP image and text embeddings (10,539 pairs) | Longleaf GPU job (`longleaf/extract_embeddings.sbatch`), copied back to `cache/rocov2/` | The same script runs on MPS: `run.sh` calls `scripts/extract_embeddings.py --if-missing` before the agent starts, measured at 466 s for all 10,539 pairs (DINOv2: 336 s). Graders without Longleaf get the same cache. The MPS output matches the CUDA smoke test (83% in-batch top-1 on the first 64 test pairs). |
 | ROCOv2: frozen DINOv2 ViT-B/14 image embeddings (second image encoder candidate) | Same script and sbatch job (`ENCODER=dinov2_vitb14_frozen`), or MPS in `run.sh` (about 5 min) | DINOv2 never saw captions, so it gives the clean "do captions help" comparison; BiomedCLIP's image tower was trained with captions. |
 | ROCOv2: light fine-tune (last few transformer blocks of both towers, contrastive loss) | Longleaf GPU job only, saved to `cache/rocov2/` | Too slow on 16 GB MPS. |
 | ROCOv2: CLIP-style projection heads, supervised heads, autoencoder on frozen features | Mac, inside `run.sh` | Trains on 512-dim cached vectors, takes seconds. |
@@ -176,6 +176,8 @@ Full text, intended evaluation, and success criteria are in `docs/OBJECTIVES.md`
   - Matched pair: frozen DINOv2 vs a DINOv2 image tower aligned to captions. DINOv2 never saw captions, so this comparison is clean.
   - BiomedCLIP as a reference: its image tower was trained with captions, and PubMed Central is the source of both, so pretraining overlap is a risk.
   - Baselines: majority class and pixel PCA.
+
+  Profile evidence: near-duplicates are rare for captions and BiomedCLIP images (0.5% or less of the 10 nearest neighbors). In DINOv2 space, though, 18.8% are near-duplicates, against 0.5% of random pairs above the cutoff. So a DINOv2-based two-tower model faces InfoNCE false negatives, which makes `vicreg` a real option.
 
   Label set: `modality` (6 classes), `body_region` (7 regions, X-ray only; breast has 13 examples and is the agent's call). No finding concepts exist in this copy. Counts are in `docs/OBJECTIVES.md`.
 

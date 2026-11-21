@@ -187,6 +187,9 @@ def redundancy_stats(Z, rng, how):
         "nearest_neighbor_cosine": _q(top[:, 0]),
         "kth_neighbor_cosine": _q(top[:, -1]),
         "random_pair_cosine": _q(S[i[keep], j[keep]]),
+        # The cutoff means different things in different representations (some embeddings put
+        # even unrelated samples at high cosine); this is the rate expected without any redundancy.
+        "random_pairs_at_or_above_cutoff": round(float((S[i[keep], j[keep]] >= NEAR_DUPLICATE_COSINE).mean()), 4),
     }
 
 
@@ -316,7 +319,8 @@ def summary_md(p):
             L.append(f"- `{name}` ({r['representation']}): {r['samples_with_a_near_duplicate']} of samples have a "
                      f"near-duplicate; {r['mean_fraction_of_knn_that_are_near_duplicates']} of the {r['k']} nearest "
                      f"neighbors are near-duplicates; exact duplicates {r['exact_duplicate_samples']}; "
-                     f"nearest-neighbor cosine {r['nearest_neighbor_cosine']} vs random pairs {r['random_pair_cosine']}")
+                     f"nearest-neighbor cosine {r['nearest_neighbor_cosine']} vs random pairs {r['random_pair_cosine']} "
+                     f"(random pairs at or above the cutoff: {r['random_pairs_at_or_above_cutoff']})")
         L.append("")
     if p["other_columns"]:
         L += ["## Other sample-level columns (not loaded, never model inputs)", ", ".join(p["other_columns"]), ""]
