@@ -75,11 +75,20 @@ def applicable(spec, encoder):
     return chosen
 
 
-def is_complete(out_dir):
+def cache_status(out_dir, dataset):
+    """(ok, reason): ok when the manifest says complete and lists exactly the declared data files
+    with their declared checksums (so a cache built from other data is never reused)."""
     try:
-        return json.loads((out_dir / "manifest.json").read_text()).get("complete") is True
+        m = json.loads((Path(out_dir) / "manifest.json").read_text())
     except (OSError, ValueError):
-        return False
+        return False, "no readable manifest.json"
+    if m.get("complete") is not True:
+        return False, "manifest says incomplete (a --limit test run?)"
+    declared = data_checksums(dataset)
+    used = m.get("data_files") or {}
+    if used != {f: declared.get(f) for f in used} or not used:
+        return False, "built from data files whose checksums differ from DATA_DESCRIPTION.md"
+    return True, f"complete: {m.get('n_pairs')} pairs, built on {m.get('device')}"
 
 
 def data_checksums(dataset):
@@ -222,9 +231,12 @@ def main():
         return
     for e in todo:
         out = Path(args.cache_root) / args.dataset / e
-        if args.if_missing and is_complete(out):
-            print(f"[extract] {out} is complete; skipping")
+        ok, why = cache_status(out, args.dataset)
+        if args.if_missing and ok:
+            print(f"[extract] {out}: {why}; skipping")
             continue
+        if out.exists():
+            print(f"[extract] {out}: {why}; rebuilding")
         try:
             final, m = extract(args.dataset, e, args.data_root, args.cache_root, args.device, args.batch_size, args.limit)
         except ValueError as err:

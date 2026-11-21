@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/bin/python scripts/*)",
+      "Bash(ls *)",
+      "Read(./**)",
+      "Edit(./outputs/**)",
+      "Write(./outputs/**)",
+      "Agent(rep-critic)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./docs/**)",
+      "Read(./longleaf/**)",
+      "Read(./CLAUDE.md)",
+      "Bash(ls *docs*)",
+      "Bash(ls *longleaf*)",
+      "Edit(./data/**)",
+      "Write(./data/**)",
+      "Edit(./cache/**)",
+      "Write(./cache/**)",
+      "Edit(./reports/**)",
+      "Write(./reports/**)",
+      "Bash(venv/bin/python scripts/fetch_data.py*)",
+      "Bash(venv/bin/python scripts/extract_embeddings.py*)",
+      "Bash(*pip install*)",
+      "Bash(cd *)",
+      "Bash(rm *)",
+      "Bash(git *)",
+      "WebFetch",
+      "WebSearch"
+    ]
+  }
+}
