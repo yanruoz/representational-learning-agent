@@ -15,5 +15,5 @@ Project 3: an agent for multimodal representation learning (BIOS774). Spec: `doc
 - Skills, `AGENT.md`, and script comments stay generic: no dataset names, genes, counts, or numbers from these datasets. Dataset facts belong only in `data/<d>/DATA_DESCRIPTION.md`.
 - Reuse code from `../gen-model-agent` by copying it in. Never import across project folders.
 - Run Python through `venv/bin/python` (Mac) or the Longleaf env's python. Never a bare `pip install`.
-- `run.sh` never starts GPU jobs. Longleaf results come in as files under `cache/<dataset>/` with a `manifest.json`.
+- `run.sh` never submits SLURM jobs. Longleaf results come in as files under `cache/<dataset>/` with a `manifest.json`. If the frozen-encoder cache is missing, `run.sh` builds it locally with `scripts/extract_embeddings.py --if-missing` (graders have no Longleaf). The agent only reads `cache/`.
 - Don't push. The user pushes with `! git push`.

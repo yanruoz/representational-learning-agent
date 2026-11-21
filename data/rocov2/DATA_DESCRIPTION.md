@@ -18,6 +18,13 @@ the 6 official test shards, so the official train/test split is kept.
 - file: train-00003-of-00027.parquet | url: https://huggingface.co/datasets/eltorio/ROCOv2-radiology/resolve/80ffeef4eb8d34d27cb5c2815305f1d8aee8a83c/data/train-00003-of-00027.parquet | sha256: f1eb6104002160e90f627897f2a12c4346ed462dce59d652bb11211c27c24c3c
 - file: test-00000-of-00006.parquet | url: https://huggingface.co/datasets/eltorio/ROCOv2-radiology/resolve/80ffeef4eb8d34d27cb5c2815305f1d8aee8a83c/data/test-00000-of-00006.parquet | sha256: e6cb01b149566e971debf7d0bd7508125ae803821611511346b543bda7a3b875
 
+## Loading
+- modality.image: file=*.parquet | kind=image | column=image
+- modality.caption: file=*.parquet | kind=text | column=caption
+- id_column: image_id
+- split: filename_prefix
+- label.modality: column=cui | first_code_of=C0040405:CT, C1306645:X-ray, C0024485:MRI, C0041618:ultrasound, C0002978:angiography, C0032743:PET
+
 ## Structure
 - Parquet files with four columns: `image` (encoded image bytes), `image_id`
   (e.g. `ROCOv2_2023_train_000001`), `caption` (free text), `cui` (list of

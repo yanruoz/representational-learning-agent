@@ -12,6 +12,11 @@ Nature Biotechnology 2022), one AnnData file per modality.
 - file: pbmc10k_RNA.h5ad | url: https://download.gao-lab.org/GLUE/dataset/10x-Multiome-Pbmc10k-RNA.h5ad | md5: e48f7b4d8d2755df943ceb470003737a
 - file: pbmc10k_ATAC.h5ad | url: https://download.gao-lab.org/GLUE/dataset/10x-Multiome-Pbmc10k-ATAC.h5ad | md5: 387ac0687e32967f29fd3a31bb402bf3
 
+## Loading
+- modality.rna: file=pbmc10k_RNA.h5ad | kind=counts
+- modality.atac: file=pbmc10k_ATAC.h5ad | kind=counts
+- label.cell_type: column=cell_type
+
 ## Structure
 - 9,631 cells, the same cells in the same order in both files (`obs_names` are
   10x barcodes and match across files).
