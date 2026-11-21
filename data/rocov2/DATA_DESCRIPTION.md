@@ -24,6 +24,7 @@ the 6 official test shards, so the official train/test split is kept.
 - id_column: image_id
 - split: filename_prefix
 - label.modality: column=cui | first_code_of=C0040405:CT, C1306645:X-ray, C0024485:MRI, C0041618:ultrasound, C0002978:angiography, C0032743:PET
+- label.body_region: column=cui | first_code_of=C0817096:chest, C0037303:skull and jaw, C0023216:lower limb, C0000726:abdomen, C0030797:pelvis, C1140618:upper limb, C0037949:spine, C0006141:breast
 
 ## Structure
 - Parquet files with four columns: `image` (encoded image bytes), `image_id`
@@ -50,7 +51,28 @@ Modality concepts:
 - C0002978: angiography
 - C0032743: positron emission tomography (PET)
 
-The loader turns these into a `modality` label (see `## Loading`).
+Body-region concepts (second position, plain X-ray images only):
+- C0817096: chest
+- C0037303: bone structure of the cranium (in captions mostly jaw and dental
+  panoramic radiographs)
+- C0023216: lower limb
+- C0000726: abdomen
+- C0030797: pelvis
+- C1140618: upper limb
+- C0037949: spine (vertebral column)
+- C0006141: breast
+
+Directionality concepts (third position, plain X-ray only) record the view,
+for example anteroposterior (C1999039), posteroanterior (C1996865), or lateral
+(C0205129). They are not declared as labels.
+
+This copy holds only these three kinds of concepts (at most 3 per image), so
+there are no finding or disease concepts.
+
+The loader turns these into a `modality` label for every image with a
+modality concept, and a `body_region` label for X-ray images with a
+body-region concept; every other image has no `body_region` label (see
+`## Loading`).
 
 ## Known caveats
 - Captions are written by article authors, not radiologists, and often describe

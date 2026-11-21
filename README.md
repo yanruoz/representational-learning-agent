@@ -1,1 +1,41 @@
-# Representational Learning Agent
+# Multimodal representation-learning agent
+
+Given a multimodal biomedical dataset and a free-text objective, an AI agent (Claude Code, run headless) inspects the modalities, chooses preprocessing, encoders, a training objective, and evaluation, trains small models on top of fixed features, evaluates the learned representations against baselines, and writes a PDF report. Every number comes from deterministic, seeded scripts; the agent writes decisions and reasons as JSON that validators check.
+
+## Requirements
+
+- macOS or Linux, Python 3.12+ (`python3` on PATH), about 6 GB free disk.
+- [Claude Code](https://claude.com/claude-code) installed and logged in (`claude` on PATH).
+- Apple silicon (MPS) or an NVIDIA GPU is recommended; CPU works but is slower.
+
+## Run
+
+From the repo root:
+
+```
+./run.sh pbmc_multiome "Future samples will be profiled with scATAC-seq only. Using this paired RNA+ATAC data, learn a representation that lets ATAC-only cells be annotated by cell type and have their gene expression estimated, and show how much better that is than working from ATAC alone." --report-number 1
+
+./run.sh rocov2 "Our archive has captions for every figure but expert labels for only a few. Learn image representations that identify imaging modality (and body region or finding if there are enough examples) from the image alone when only a small fraction of images is labeled, and tell me whether using captions during training helps." --report-number 2
+```
+
+Each command:
+1. creates `venv/` from the pinned `requirements.txt` (first run only),
+2. downloads the dataset's files if missing and checks their checksums (about 200 MB for `pbmc_multiome`, 2.4 GB for `rocov2`),
+3. for image and text modalities, computes frozen pretrained-encoder embeddings into `cache/<dataset>/` if they are not already there (about 8 minutes per image encoder on an Apple M4),
+4. runs the agent, which writes everything to `outputs/<dataset>/` and the report to `reports/<dataset>/generated_report_<N>.pdf`.
+
+Options: `--budget-min M` (training time budget, default 30), `--use-api-key` (use `ANTHROPIC_API_KEY` from `.env` instead of the Claude Code login), `--smoke` in place of the objective (setup and a permission check only).
+
+## Outputs (also the interface for other tools)
+
+`outputs/<dataset>/` holds `profile.json`, `objective.json`, `plan.json`, `metrics/*.json`, `embeddings/<model>_s<seed>.npy`, `embeddings.npy` (the chosen representation, rows aligned with `embedding_index.csv`), `summary.json` (machine-readable: chosen model, paths, headline metrics with baselines), `findings.md`, and figures.
+
+## Optional: GPU cluster
+
+`longleaf/` has SLURM scripts that compute the same embedding cache on a GPU cluster; copy `cache/<dataset>/` back and `run.sh` reuses it (it checks the data checksums in each cache's `manifest.json`). Not needed to run the pipeline.
+
+## Tests
+
+```
+venv/bin/python -m unittest discover -s tests -v
+```

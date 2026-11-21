@@ -66,7 +66,8 @@ class TestPipelineIsolation(unittest.TestCase):
     def test_pipeline_cannot_read_dev_docs(self):
         # Dev documents (handoff, requirements, build plan, Longleaf scripts, CLAUDE.md) hold dataset
         # specifics and planned objectives; the agent's decisions must not come from them.
-        for rule in ("Read(./docs/**)", "Read(./longleaf/**)", "Read(./CLAUDE.md)"):
+        # README.md holds the run commands with the planned objectives.
+        for rule in ("Read(./docs/**)", "Read(./longleaf/**)", "Read(./CLAUDE.md)", "Read(./README.md)"):
             self.assertIn(rule, self.pipe["deny"])
         for path in ("docs", "longleaf"):
             self.assertTrue(_covered(f"Bash(ls {path})", self.pipe["deny"]), f"ls {path} not denied")
@@ -76,7 +77,7 @@ class TestPipelineIsolation(unittest.TestCase):
         from runtime_settings import build
         repo = CLAUDE_DIR.parent.as_posix()
         deny = build()["permissions"]["deny"]
-        for rel in ("docs/**", "longleaf/**", "CLAUDE.md"):
+        for rel in ("docs/**", "longleaf/**", "CLAUDE.md", "README.md"):
             self.assertIn(f"Read(/{repo}/{rel})", deny)
 
     def test_agent_cannot_write_cache_or_run_setup_steps(self):

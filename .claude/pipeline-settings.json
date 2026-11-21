@@ -13,6 +13,7 @@
       "Read(./docs/**)",
       "Read(./longleaf/**)",
       "Read(./CLAUDE.md)",
+      "Read(./README.md)",
       "Bash(ls *docs*)",
       "Bash(ls *longleaf*)",
       "Edit(./data/**)",

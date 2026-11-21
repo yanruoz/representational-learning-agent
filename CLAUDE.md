@@ -11,7 +11,7 @@ Project 3: an agent for multimodal representation learning (BIOS774). Spec: `doc
 - By the end of **Tue Nov 24**, `run.sh` must produce `generated_report_1` and `generated_report_2` end to end, even if rough.
 
 ## Hard rules
-- **The pipeline never reads `docs/**` or `longleaf/**`** (or this file). Enforce this with deny rules in `.claude/pipeline-settings.json` and a check in `tests/test_settings.py`, not only with a prompt instruction. Reason: in Project 2, dataset details leaked into the agent's instructions, so its decisions could look pre-written.
+- **The pipeline never reads `docs/**`, `longleaf/**`, `README.md`** (it has the run commands with the objectives), or this file. Enforce this with deny rules in `.claude/pipeline-settings.json` and a check in `tests/test_settings.py`, not only with a prompt instruction. Reason: in Project 2, dataset details leaked into the agent's instructions, so its decisions could look pre-written.
 - Skills, `AGENT.md`, and script comments stay generic: no dataset names, genes, counts, or numbers from these datasets. Dataset facts belong only in `data/<d>/DATA_DESCRIPTION.md`.
 - Reuse code from `../gen-model-agent` by copying it in. Never import across project folders.
 - Run Python through `venv/bin/python` (Mac) or the Longleaf env's python. Never a bare `pip install`.
