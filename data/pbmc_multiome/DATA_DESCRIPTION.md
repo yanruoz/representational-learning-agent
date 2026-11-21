@@ -23,9 +23,10 @@ Nature Biotechnology 2022), one AnnData file per modality.
 - RNA: 9,631 cells x 29,095 genes. Values are raw UMI counts (integer-valued,
   stored as float32), about 93% zeros. `var` includes gene coordinates and a
   precomputed `highly_variable` flag.
-- ATAC: 9,631 cells x 107,194 peaks. Values are raw fragment counts per peak
-  (integer-valued, small: maximum 64 in the first 200 cells), about 93% zeros.
-  Peaks are named `chrN:start-end`.
+- ATAC: 9,631 cells x 107,194 peaks. Values are small non-negative integers
+  (maximum 108), about 93% zeros. About 93% of nonzero values are even and two
+  thirds equal 2, which fits counting both ends of each DNA fragment (cut sites)
+  rather than fragments. Peaks are named `chrN:start-end`.
 - Total size about 200 MB.
 
 ## Labels
@@ -42,8 +43,9 @@ imbalanced: the largest class has 2,554 cells and the two smallest have 17 and
   modalities (`seurat_clusters`, `wsnn_res.0.8`, `sub.cluster`, `SCT.weight`,
   `ATAC.weight`, per-modality count totals). Using any of them as model input
   leaks label information.
-- ATAC peak counts are much sparser per feature than RNA and are usually treated
-  as near-binary accessibility.
+- Per-peak ATAC signal is low: a cell has a handful of reads in a peak or none.
+  Accessibility is often modeled as present/absent, but the values here are not
+  binary as stored (see Structure).
 - Classes with fewer than about 20 cells give unstable per-class metrics.
 - One donor and one batch: no batch effect to correct, and no way to test
   generalization across donors.
