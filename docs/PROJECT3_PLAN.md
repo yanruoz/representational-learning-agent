@@ -26,6 +26,7 @@ Source for reuse: `../gen-model-agent` (Project 2). Code is copied in, never imp
 |---|---|---|
 | PBMC: everything (HVG/LSI input, MLP encoders, all methods) | Mac, inside `run.sh` | Inputs are about 9.6k cells x a few thousand features. Small MLPs train in minutes on MPS. No pretrained encoder needed. |
 | ROCOv2: frozen BiomedCLIP image and text embeddings (10,539 pairs) | Longleaf GPU job (`longleaf/extract_embeddings.sbatch`), copied back to `cache/rocov2/` | The same script runs on MPS: `run.sh` calls `scripts/extract_embeddings.py --if-missing` before the agent starts, measured at about 8 minutes for all pairs (256 pairs in 11.5 s). Graders without Longleaf get the same cache. The MPS output matches the CUDA smoke test (83% in-batch top-1 on the first 64 test pairs). |
+| ROCOv2: frozen DINOv2 ViT-B/14 image embeddings (second image encoder candidate) | Same script and sbatch job (`ENCODER=dinov2_vitb14_frozen`), or MPS in `run.sh` (about 5 min) | DINOv2 never saw captions, so it gives the clean "do captions help" comparison; BiomedCLIP's image tower was trained with captions. |
 | ROCOv2: light fine-tune (last few transformer blocks of both towers, contrastive loss) | Longleaf GPU job only, saved to `cache/rocov2/` | Too slow on 16 GB MPS. |
 | ROCOv2: CLIP-style projection heads, supervised heads, autoencoder on frozen features | Mac, inside `run.sh` | Trains on 512-dim cached vectors, takes seconds. |
 
@@ -35,7 +36,7 @@ Source for reuse: `../gen-model-agent` (Project 2). Code is copied in, never imp
 
 **Project 4 contract.** `outputs/<d>/summary.json` holds the chosen model id, paths to `embeddings.npy` (chosen joint embedding, rows aligned with `embedding_index.csv`), per-modality embeddings when they exist, `metrics/*.json`, headline metrics with their baselines, and the report path. All embeddings for every `<model>_s<seed>` stay under `outputs/<d>/embeddings/`.
 
-**Permissions (pipeline).** Copy P2's `.claude/pipeline-settings.json` and add denies: `Read(./docs/**)`, `Read(./longleaf/**)`, `Read(./CLAUDE.md)`, `Edit/Write(./cache/**)`. `bin/runtime_settings.py` adds the absolute-path variants. `tests/test_settings.py` additionally asserts these read denies exist.
+**Permissions (pipeline).** Copied from P2, plus denies: `Read(./docs/**)`, `Read(./longleaf/**)`, `Read(./CLAUDE.md)`, `Read(./README.md)` (it has the run commands with the objectives), `ls` of `docs`/`longleaf`, `Edit/Write(./cache/**)`, and running `fetch_data.py` / `extract_embeddings.py`. `bin/runtime_settings.py` adds the absolute-path variants. `tests/test_settings.py` additionally asserts these read denies exist.
 
 ## 2. Reuse / adapt / rewrite by file
 
@@ -71,49 +72,118 @@ Source for reuse: `../gen-model-agent` (Project 2). Code is copied in, never imp
 |---|---|---|
 | `data-profiling` | profile → plan | How to read the per-modality profile; preprocessing choices by modality kind (count matrices, sparse near-binary counts, images, free text) and when each is wrong; pairing and split rules (split by sample, held-out never used for fitting, preprocessing fit on train only); how to spot label-leakage columns and derived labels. |
 | `objective-interpretation` | objective.json | Map free text to tasks (`joint_embedding`, `cross_modal_retrieval`, `cross_modal_prediction`, `clustering`, `label_prediction`); proceed / adapt / decline; how to write a success criterion that names a metric, a baseline, and a margin the methods can plausibly meet; what to do when labels are missing or not independent of a modality. |
-| `method-selection` | plan.json | The capability table (§4) and plan schema; how to read `baseline_check` output to choose (e.g. one modality already near ceiling → fusion gains are bounded; weak cross-modal agreement → alignment will be hard; small labeled set → supervised heads overfit); encoder choice (raw features vs cached pretrained encoder) and loss; hyperparameter reasons; which comparisons each method needs. No method is the default for any modality. |
+| `method-selection` | plan.json | **Written** (`.claude/skills/method-selection/SKILL.md`): inference modalities first; method capabilities; encoder per modality from the baseline check's candidates (pretraining overlap, confounded comparisons, a no-pretraining baseline always kept); two-tower loss `infonce` / `vicreg` / `supcon` from redundancy and label evidence; required baselines. Every choice cites evidence. |
 | `evaluation` | plan + results | Which metric answers which task; baselines and chance references required for each; seed spread vs gap rule; how labels derived from a modality bias comparisons; embedding collapse signs. |
 | `downstream-use` | recommendation.json | What the embeddings can and cannot be used for; the `summary.json` contract for callers; verdict wording. |
 | `reporting` | findings.md | Reader-first structure, glossary, every number traced to an artifact, limitations required. |
 
-Critic `rep-critic` (sees objective, plan, metrics, run logs, figures only). Six checks: (1) does a metric test the success criterion, (2) baselines and chance references present and fair (same split, same dimensionality budget), (3) seed stability vs gaps, (4) training adequacy (loss still falling, temperature collapse, effective-rank collapse), (5) leakage: label-derived inputs; labels derived from a modality treated as independent truth; test data used in fine-tuning; and **pretraining overlap**, when the data description says the evaluation data may share a source with a pretrained encoder's training data. In that case the critic flags any conclusion that rests only on that encoder's zero-shot or fine-tuned numbers, and checks that a baseline with no pretraining is reported next to it. (6) Reasons that would read the same on any dataset. The critic learns about overlap only from `DATA_DESCRIPTION.md` and the cache manifest, so the critic prompt stays generic.
+Critic `rep-critic` (sees objective, plan, metrics, run logs, figures only). Six checks: (1) does a metric test the success criterion, (2) baselines and chance references present and fair (same split, same dimensionality budget), (3) seed stability vs gaps, (4) training adequacy and **collapse**: loss still falling at the last epoch, temperature at its bound, and, from `metrics/collapse.json`, per-dimension variance (fraction of embedding dimensions with standard deviation below 1% of the largest) and effective rank (exp of the entropy of the normalized singular values) of every learned embedding, compared with its input features. A learned embedding whose effective rank is far below its input's, or with many near-constant dimensions, is flagged even if its probe scores look fine, (5) leakage: label-derived inputs; labels derived from a modality treated as independent truth; test data used in fine-tuning; and **pretraining overlap**, when the data description says the evaluation data may share a source with a pretrained encoder's training data. In that case the critic flags any conclusion that rests only on that encoder's zero-shot or fine-tuned numbers, and checks that a baseline with no pretraining is reported next to it. (6) Reasons that would read the same on any dataset. The critic learns about overlap only from `DATA_DESCRIPTION.md` and the cache manifest, so the critic prompt stays generic.
 
-## 4. Method capability table (goes into `plan_schema.METHOD_CAPABILITIES`)
+## 4. Methods, encoders, losses, and the plan schema
 
-| Method | Needs labels | Needs paired samples | Joint embedding | Per-modality embeddings in a shared space | Cross-modal retrieval | Cross-modal prediction | Can use cached pretrained encoder | Runs in `run.sh` |
-|---|---|---|---|---|---|---|---|---|
-| `concat_baseline` (per-modality PCA/LSI, concatenated) | no | yes | yes | no | no | no | yes | yes |
-| `supervised_fusion` (per-modality encoders → fused → classifier; embedding = fused layer) | **yes** | yes | yes | no | no | no | yes | yes |
-| `contrastive_alignment` (two encoders, symmetric InfoNCE, CLIP-style) | no | **yes** | yes (mean/concat of the two) | **yes** | **yes** | via nearest neighbor in the other modality | yes | yes |
-| `multimodal_autoencoder` (self-supervised; per-modality encoders → shared latent → per-modality decoders, modality dropout) | no | yes for training | yes | partial (each encoder alone maps into the shared latent) | weak | **yes** (encode one, decode the other) | yes | yes |
-| `pretrained_zero_shot` (frozen pretrained multimodal encoder) | no | no | yes | yes | yes | no | is one | yes (from cache) |
-| `pretrained_finetune` (partial unfreeze, contrastive) | no | yes | yes | yes | yes | no | is one | **no**: from cache, made on Longleaf |
+The agent makes three real choices per model, each with a `reason` and an `evidence` list (file, key path, value; `validate_plan.py` checks that each value matches the file). The generated report's methods page prints, for every model and every modality, the encoder, head, and loss with their reasons.
 
-Validator rules: a task needs a method with the capability; `supervised_fusion` needs a label column, and its label metrics must be computed on the held-out split; `pretrained_*` need a cache manifest; every plan includes `concat_baseline` or a single-modality baseline for each task.
+**Methods** (`plan_schema.METHOD_CAPABILITIES`):
 
-## 5. Objectives (one per dataset, chosen so they are plausibly met)
-
-- **pbmc_multiome** (report 1): *"Learn a joint RNA + ATAC cell embedding. Check whether it identifies cell types at least as well as the better single modality, and whether each modality can find the same cell in the other."* Success: on held-out cells, joint kNN macro-F1 ≥ best single-modality baseline minus the seed spread, and ATAC-to-RNA recall@10 well above chance (chance = 10 / number of held-out cells). Plausible because RNA alone is already strong and contrastive alignment of paired multiome cells is known to work at this scale. Risk: the labels came from a joint RNA+ATAC clustering, which favors the joint embedding; the data description says so and the agent should report it.
-- **rocov2** (report 2): *"Learn image and caption representations of radiology figures that identify the imaging modality from the image. Check how much the caption adds, and how well captions retrieve their images."* Success: on the official test pairs, imaging-modality macro-F1 from the learned image (or joint) embedding is well above the majority-class baseline and above a baseline with no pretraining (downsampled-pixel PCA for images, TF-IDF + SVD for captions). Frozen BiomedCLIP (its linear probe and its zero-shot retrieval) is reported as a **strong reference, not the bar to beat**: the Longleaf smoke test gave 83% image-to-text top-1 within batches of 64 (chance 1.6%). Some of that is likely pretraining overlap, because ROCOv2 and BiomedCLIP's pretraining data both come from PubMed Central. Retrieval recall@k is reported against chance and against that reference, as a secondary result.
-
-**ROCOv2 modality labels** (derived by the loader from the concept list; see `data/rocov2/DATA_DESCRIPTION.md`). In this copy every row has 1 to 3 concepts. The first is always the manually curated modality concept, and no modality code ever appears in another position. Coverage in the subset (train / test / total):
-
-| Code | Modality | Train | Test | Total |
+| Method | Needs labels | Embeds one modality alone | Cross-modal prediction | Losses |
 |---|---|---|---|---|
-| C0040405 | CT | 3031 | 622 | 3653 |
-| C1306645 | Plain X-ray | 2513 | 428 | 2941 |
-| C0024485 | MRI | 1431 | 251 | 1682 |
-| C0041618 | Ultrasound | 1202 | 260 | 1462 |
-| C0002978 | Angiography | 589 | 72 | 661 |
-| C0032743 | PET | 47 | 5 | 52 |
-| `nan` (no code) | missing label | 71 | 17 | 88 |
-| | **all pairs** | **8884** | **1655** | **10539** |
+| `single_modality_features` (baseline) | no | yes | kNN averaging in its own space | none |
+| `linear_supervised` (baseline) | labels or a target modality | yes | **PLS regression** | logistic regression (labels), PLS (targets) |
+| `frozen_probe` | probe only | yes | no | none (cached encoder + kNN / linear probe) |
+| `two_tower` | only with `supcon` | yes (one tower) | kNN averaging in the shared space | `infonce` \| `vicreg` \| `supcon` |
+| `multimodal_autoencoder` | no | with modality dropout | yes (decode the other modality) | reconstruction per modality (MSE, Bernoulli, or negative binomial) |
+| `supervised_fusion` | yes | with modality dropout only | no | cross-entropy |
+| `pretrained_finetune` | no | yes | no | `infonce`; from cache only, made on Longleaf (first cut) |
 
-Rows with no modality code are kept for retrieval and left out of label metrics. PET has only 5 test pairs, so its per-class F1 is unstable; the agent should say so or merge it, and give a reason either way. Captions usually name the modality ("CT of the chest ..."), so caption-only or joint modality accuracy is close to trivial. Image-only results are the informative ones, and the report must say this.
+**Encoders** (candidates per modality kind; all fit on training samples only):
+
+| Modality kind | No pretraining (always a candidate and a baseline) | Cached frozen encoders |
+|---|---|---|
+| counts | PCA of log-normalized counts; LSI (TF-IDF + truncated SVD) for sparse low-count features | none |
+| image | downsampled grayscale pixels + PCA | `biomedclip_frozen` (image tower), `dinov2_vitb14_frozen` |
+| text | TF-IDF + truncated SVD | `biomedclip_frozen` (text tower) |
+
+Heads: `none`, `linear`, or a small `mlp` (hidden sizes in the hyperparameters).
+
+**Two-tower losses.**
+- `infonce`: other samples in the batch are negatives. False negatives when many samples are near-duplicates.
+- `vicreg`: no negatives; variance and covariance terms prevent collapse.
+- `supcon`: same-label positives; needs training labels, and only from the labeled fraction the evaluation allows.
+
+Paired modalities are the two views, so no augmentations. The guidance is in the method-selection skill; the evidence is `profile.json → redundancy` and class counts.
+
+**Plan schema (one model entry):**
+
+```json
+{
+  "id": "tt_vicreg",
+  "method": "two_tower",
+  "inputs": {
+    "<modality>": {"encoder": "lsi", "head": "mlp", "reason": "...",
+                   "evidence": [{"file": "metrics/baseline_check.json", "key": "encoders.<modality>.lsi.val_macro_f1", "value": 0.81}]}
+  },
+  "loss": "vicreg",
+  "loss_reason": "...",
+  "loss_evidence": [{"file": "profile.json", "key": "redundancy.<modality>.mean_fraction_of_knn_that_are_near_duplicates", "value": 0.0}],
+  "inference_modalities": ["<modality>"],
+  "trained_without": null,
+  "hyperparameters": {"embed_dim": 64, "hidden_dims": [256], "epochs": 100, "batch_size": 256, "lr": 0.001},
+  "hyperparameter_reasons": {"embed_dim": "...", "...": "one per key"},
+  "seeds": [0, 1, 2],
+  "serves_tasks": ["label_prediction", "cross_modal_prediction"],
+  "estimated_minutes": 1.0,
+  "status": "planned",
+  "reason": "..."
+}
+```
+
+`trained_without` names the modality left out of a matched "without" model, for objectives that ask whether a training-only modality helps.
+
+**Baseline check** (`scripts/baseline_check.py`, run before the agent picks models). On a validation split carved from the training samples, never the test split:
+- **Every candidate encoder, frozen, per modality:** kNN and linear-probe macro-F1 for each label, at the label fractions the objective needs (seeded draws).
+- **Cross-modal agreement:** CCA between the inference modality's candidate features and the other modality's.
+- **Frozen cross-modal retrieval:** for jointly pretrained encoders (zero-shot).
+- **Seed spread:** of each number.
+- **Redundancy:** copied from the profile, so the evidence is in one file.
+
+**Evaluation** (`scripts/evaluate_rep.py`, held-out samples, inference modalities only):
+- **Labels:** kNN and linear probe (macro-F1, per class) at each label fraction.
+- **Clustering:** KMeans ARI / NMI.
+- **Retrieval:** recall@1/5/10 with chance.
+- **Cross-modal prediction:** per-feature Pearson (median and distribution).
+- **Collapse:** `metrics/collapse.json` gives per-dimension variance and effective rank for every embedding.
+
+Every metric is written next to its baselines (single-modality features, linear supervised) and the seed spread.
+
+**Validator rules.**
+- A task needs a method with the capability, and a method that embeds the inference modalities alone.
+- `supcon` and `supervised_fusion` need labels, limited to the allowed labeled fraction.
+- Cached encoders need a complete manifest matching the data checksums.
+- Each task has both required baselines.
+- Every encoder, head, loss, and hyperparameter has a reason, and every evidence value matches its file.
+
+## 5. Objectives
+
+Full text, intended evaluation, and success criteria are in `docs/OBJECTIVES.md` (the pipeline cannot read it). In short:
+
+- **pbmc_multiome** (report 1): annotate **ATAC-only** cells by cell type and estimate their gene expression, using paired RNA+ATAC for training only. Held-out cells, ATAC as the only input:
+  - kNN macro-F1 vs an ATAC-LSI kNN baseline and logistic regression on ATAC-LSI;
+  - per-gene Pearson on highly variable genes vs kNN-in-ATAC-LSI averaging and PLS (ATAC-LSI → expression).
+
+  Profile evidence: low redundancy (RNA: 4% of cells have a near-duplicate at cosine 0.95; ATAC: none), so `infonce` false negatives are not expected from near-duplicates. The largest class is 27% of cells, though, so same-class negatives are common in any batch. This is a real `infonce` vs `vicreg` choice.
+- **rocov2** (report 2): imaging modality (and body region, X-ray only) **from the image alone** with 1%, 10%, 100% of training labels; do captions used in training help?
+  - Image-only test-set macro-F1.
+  - Matched pair: frozen DINOv2 vs a DINOv2 image tower aligned to captions. DINOv2 never saw captions, so this comparison is clean.
+  - BiomedCLIP as a reference: its image tower was trained with captions, and PubMed Central is the source of both, so pretraining overlap is a risk.
+  - Baselines: majority class and pixel PCA.
+
+  Label set: `modality` (6 classes), `body_region` (7 regions, X-ray only; breast has 13 examples and is the agent's call). No finding concepts exist in this copy. Counts are in `docs/OBJECTIVES.md`.
+
+**Risk seen in the first check.** On 252 test images, 1-NN leave-one-out modality accuracy from frozen features is already 0.956 (BiomedCLIP) and 0.948 (DINOv2), against 0.409 for the majority class. Little room is left for captions to help modality, even at 1% labels. Body region is harder, with fewer labels, so it is more likely to show an effect. "Captions don't help modality, because frozen image features already separate it" is an acceptable finding if the evidence shows it.
 
 **Limitations to carry into report.pdf and both generated reports:**
-- Pretraining overlap: BiomedCLIP was trained on PubMed Central figure-caption pairs, the same source as ROCOv2, so some test pairs may have been seen in pretraining. Frozen and fine-tuned BiomedCLIP results can be inflated by this. The no-pretraining baselines are not affected.
-- PBMC labels come from a joint RNA+ATAC clustering, which favors joint embeddings.
+- Pretraining overlap: BiomedCLIP was trained on PubMed Central figure-caption pairs, the same source as ROCOv2. Frozen and fine-tuned BiomedCLIP results can be inflated. DINOv2 and the no-pretraining baselines don't share this risk to the same degree.
+- PBMC labels come from a joint RNA+ATAC clustering, which favors representations that use RNA. That is the comparison the objective asks about, so the report must state it.
 
 ## 6. Milestones
 
@@ -131,6 +201,7 @@ Time is your supervision time; I write the code during those sessions.
 **Mon Nov 23 (2 h). Methods + evaluation without the agent.**
 - `plan_schema.py` (§4), `preprocess.py`, `models/` (encoders, losses, fusion), `train.py`, `evaluate_rep.py`, `baseline_check.py`, `run_plan.py`, `visualize.py`.
 - Hand-written plans run end to end on both datasets; read the figures.
+- Dry run of the skills on `docs/DRYRUN_DATASETS.md` (STimage-1K4M, TCGA-BRCA): walk each objective through the skills and record what assumes our two datasets.
 - Write and submit `finetune_encoder.py` on Longleaf (runs while you are away if needed).
 - Exit check: hand plans give metrics and figures for every method on both datasets; numbers make sense against baselines.
 

@@ -12,6 +12,9 @@
                    image:  sizes, color modes, formats, grayscale-stored-as-color (seeded sample)
      labels      class counts (overall and per split), missing labels, imbalance, small classes,
                  and how often a class name appears verbatim in each text modality (a leakage hint)
+     redundancy  per modality representation: how many of each sample's nearest neighbors are
+                 near-duplicates (evidence for choosing a contrastive loss: near-duplicates act as
+                 false negatives for InfoNCE). Computed on a seeded sample of samples.
      other_columns  sample-level columns present but not loaded (never model inputs)
      cache       frozen-encoder cache status for every encoder that applies
 """
@@ -33,6 +36,11 @@ INTEGER_CHECK_ROWS = 500      # rows checked for integer-valued counts
 SMALL_CLASS = 20              # classes below this many samples give unstable per-class metrics
 SMALL_TEST_CLASS = 10         # same, within a declared test split
 RARE_FEATURE_FRACTION = 0.01  # features detected in fewer than 1% of samples
+REDUNDANCY_SAMPLE = 3000      # samples compared all-against-all for the redundancy check
+REDUNDANCY_K = 10             # nearest neighbors per sample
+NEAR_DUPLICATE_COSINE = 0.95  # cosine similarity at or above which two samples count as near-duplicates
+COUNTS_TOP_FEATURES = 2000    # counts: highest-variance features kept before PCA
+COUNTS_PCS = 50
 
 
 def _q(x, qs=(5, 50, 95)):
@@ -153,6 +161,78 @@ def profile_labels(values, split, text_mods):
     return out
 
 
+def _unit(X):
+    X = np.asarray(X, dtype=np.float64)
+    return X / np.maximum(np.linalg.norm(X, axis=1, keepdims=True), 1e-12)
+
+
+def redundancy_stats(Z, rng, how):
+    """Z: (n, d) rows on the unit sphere. Nearest neighbors by cosine among the same rows."""
+    n = Z.shape[0]
+    S = Z @ Z.T
+    np.fill_diagonal(S, -np.inf)
+    k = min(REDUNDANCY_K, n - 1)
+    top = -np.sort(-S, axis=1)[:, :k]
+    near = top >= NEAR_DUPLICATE_COSINE
+    i, j = rng.integers(0, n, size=(2, 20000))
+    keep = i != j
+    return {
+        "representation": how,
+        "n_compared": int(n),
+        "k": int(k),
+        "near_duplicate_cosine": NEAR_DUPLICATE_COSINE,
+        "samples_with_a_near_duplicate": round(float(near[:, 0].mean()), 4),
+        "mean_fraction_of_knn_that_are_near_duplicates": round(float(near.mean()), 4),
+        "exact_duplicate_samples": round(float((top[:, 0] >= 0.9999).mean()), 4),
+        "nearest_neighbor_cosine": _q(top[:, 0]),
+        "kth_neighbor_cosine": _q(top[:, -1]),
+        "random_pair_cosine": _q(S[i[keep], j[keep]]),
+    }
+
+
+def _counts_repr(X):
+    import scipy.sparse as sp
+    from sklearn.decomposition import PCA
+    tot = np.asarray(X.sum(axis=1)).ravel()
+    Xn = sp.diags(np.median(tot) / np.maximum(tot, 1)) @ X
+    Xn = Xn.log1p() if sp.issparse(Xn) else np.log1p(Xn)
+    mean = np.asarray(Xn.mean(axis=0)).ravel()
+    var = np.asarray(Xn.multiply(Xn).mean(axis=0)).ravel() - mean ** 2
+    top = np.argsort(-var)[:COUNTS_TOP_FEATURES]
+    D = Xn[:, top].toarray()
+    Z = PCA(n_components=min(COUNTS_PCS, D.shape[1], D.shape[0] - 1), random_state=SEED).fit_transform(D)
+    return Z, (f"library-size-normalized log1p counts, top {COUNTS_TOP_FEATURES} features by variance, "
+               f"{COUNTS_PCS}-component PCA (centered), cosine")
+
+
+def redundancy(d, cache, rng):
+    n = len(d["ids"])
+    idx = np.sort(rng.choice(n, size=min(REDUNDANCY_SAMPLE, n), replace=False))
+    out = {}
+    for name, m in d["modalities"].items():
+        if m["kind"] == "counts":
+            Z, how = _counts_repr(m["X"][idx])
+            out[name] = redundancy_stats(_unit(Z), rng, how)
+        elif m["kind"] == "text":
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            T = TfidfVectorizer(sublinear_tf=True, min_df=2).fit_transform([m["texts"][i] for i in idx])
+            out[name] = redundancy_stats(_unit(T.toarray()), rng, "TF-IDF (sublinear, min_df=2), cosine")
+    # Cached frozen-encoder embeddings (images and text), aligned by sample id.
+    pos = {sid: k for k, sid in enumerate(d["ids"])}
+    for enc_id, c in cache.items():
+        if not c["ready"]:
+            continue
+        folder = data_spec.REPO / "cache" / d["dataset"] / enc_id
+        import csv
+        with open(folder / "ids.csv") as f:
+            row_of = {r["pair_id"]: int(r["row"]) for r in csv.DictReader(f)}
+        rows = [row_of[d["ids"][i]] for i in idx if d["ids"][i] in row_of]
+        for kind, name in c["modalities"].items():
+            E = np.load(folder / f"{name}.npy", mmap_mode="r")[rows]
+            out[f"{name} ({enc_id})"] = redundancy_stats(_unit(E), rng, f"frozen {enc_id} embedding, cosine")
+    return out
+
+
 def profile(dataset, data_root=loaders.DATA_ROOT, description_root=loaders.DATA_ROOT):
     rng = np.random.default_rng(SEED)
     spec = data_spec.parse(dataset, description_root)
@@ -188,7 +268,9 @@ def profile(dataset, data_root=loaders.DATA_ROOT, description_root=loaders.DATA_
         if mods is None:
             continue
         ok, why = extract_embeddings.cache_status(data_spec.REPO / "cache" / dataset / enc_id, dataset)
-        p["cache"][enc_id] = {"ready": ok, "status": why, "modalities": mods, "description": enc["description"]}
+        p["cache"][enc_id] = {"ready": ok, "status": why, "modalities": mods, "description": enc["description"],
+                              "pretraining_data": enc["pretraining_data"]}
+    p["redundancy"] = redundancy(d, p["cache"], rng)
     return p
 
 
@@ -225,11 +307,23 @@ def summary_md(p):
         for t, h in l.get("own_class_name_in_text_fraction", {}).items():
             L.append(f"- Own class name appears in `{t}`: {h['overall']} of labeled samples")
         L.append("")
+    if p.get("redundancy"):
+        r0 = next(iter(p["redundancy"].values()))
+        L += ["## Redundancy (near-duplicates among nearest neighbors)",
+              f"Seeded sample of {r0['n_compared']} samples; near-duplicate = cosine >= {r0['near_duplicate_cosine']}; "
+              f"k = {r0['k']} nearest neighbors.", ""]
+        for name, r in p["redundancy"].items():
+            L.append(f"- `{name}` ({r['representation']}): {r['samples_with_a_near_duplicate']} of samples have a "
+                     f"near-duplicate; {r['mean_fraction_of_knn_that_are_near_duplicates']} of the {r['k']} nearest "
+                     f"neighbors are near-duplicates; exact duplicates {r['exact_duplicate_samples']}; "
+                     f"nearest-neighbor cosine {r['nearest_neighbor_cosine']} vs random pairs {r['random_pair_cosine']}")
+        L.append("")
     if p["other_columns"]:
         L += ["## Other sample-level columns (not loaded, never model inputs)", ", ".join(p["other_columns"]), ""]
     if p["cache"]:
         L.append("## Frozen-encoder cache")
-        L += [f"- `{k}`: {'ready' if v['ready'] else 'NOT ready'} ({v['status']})" for k, v in p["cache"].items()]
+        L += [f"- `{k}`: {'ready' if v['ready'] else 'NOT ready'} ({v['status']}). Pretraining data: {v['pretraining_data']}"
+              for k, v in p["cache"].items()]
     return "\n".join(L) + "\n"
 
 

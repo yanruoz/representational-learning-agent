@@ -1,0 +1,59 @@
+---
+name: method-selection
+description: Choose the representation-learning method, the encoder for each modality, and the training loss for the validated objective, citing evidence from profile.json and metrics/baseline_check.json. Used when writing plan.json, after the data-profiling skill has set the split and preprocessing.
+---
+
+# Method, encoder, and loss selection
+
+You make three choices per model, and each one is a real choice between candidates:
+
+1. **Method**: how modalities are combined (table below).
+2. **Encoder per modality**: what turns raw data into input features (a computed featurizer or a cached frozen pretrained encoder), plus the trainable head on top.
+3. **Training loss**: for two-tower methods, `infonce`, `vicreg`, or `supcon`.
+
+Every choice gets a `reason` and an `evidence` list. Each evidence item names a file (`profile.json` or `metrics/baseline_check.json`), a key path, and the value you read there; `validate_plan.py` checks that the value matches. A reason that would read the same for any dataset of this shape is not a reason. "Default", "standard", or "commonly used" is never a reason; the validator rejects it.
+
+## Step 1: what the objective needs at prediction time
+
+Read `objective.json`: which modalities are available for **new** samples (`inference_modalities`) and which are available only for training. This rules methods in or out before anything else:
+
+- If new samples have only one modality, the model must embed that modality **alone**. Two-tower models qualify (use that modality's tower). An autoencoder qualifies only if trained with modality dropout. Supervised fusion of all modalities does not, unless trained with modality dropout.
+- If the objective asks for one modality's values to be estimated from another (cross-modal prediction), the method needs a path from the input modality to the target: a decoder, or nearest neighbors in a shared space whose target values are averaged.
+- If the objective asks whether a training-only modality helps, plan a matched pair: the same encoder and head trained with and without that modality.
+
+## Step 2: method (capabilities)
+
+| Method | Needs labels | Embeds one modality alone | Cross-modal prediction | Notes |
+|---|---|---|---|---|
+| `single_modality_features` (baseline) | no | yes | via nearest neighbors in its own space | always planned for each inference modality |
+| `linear_supervised` (baseline) | yes, or a target modality | yes | yes (PLS regression) | logistic regression for labels, PLS for cross-modal targets |
+| `frozen_probe` | for the probe only | yes | no | cached encoder features + kNN / linear probe, no training |
+| `two_tower` | only with `supcon` | yes | via nearest neighbors in the shared space | loss: `infonce`, `vicreg`, `supcon` |
+| `multimodal_autoencoder` | no | with modality dropout | yes (decode the other modality) | reconstruction loss per modality |
+| `supervised_fusion` | yes | with modality dropout only | no | embedding = fused layer before the classifier |
+
+## Step 3: encoder per modality
+
+Candidates are listed in `metrics/baseline_check.json` under `encoders`: computed featurizers (e.g. PCA, LSI, TF-IDF + SVD, downsampled pixels + PCA) and every cached frozen encoder whose cache is ready (`profile.json` → `cache`). For each candidate, the baseline check reports frozen-feature performance on a validation split carved from the training data, never the test split.
+
+- Prefer the candidate with better validation performance for the objective's task, and cite both numbers. If the difference is within the seed spread the check reports, say so and decide on another ground (dimension, speed, what the comparison in Step 1 needs).
+- **Pretraining overlap.** `profile.json` → `cache.<encoder>.pretraining_data` says what each encoder was trained on; `DATA_DESCRIPTION.md` says where the dataset comes from. If they may overlap, that encoder's numbers can be inflated. Keep a candidate without that overlap in the plan, and state the risk in the reason.
+- **Confounded comparisons.** If the objective asks whether training with modality B helps modality A, an encoder for A that was itself pretrained together with B already contains B's influence. For the clean comparison use an A-encoder pretrained without B; the jointly pretrained encoder can still be reported as a reference.
+- Always keep one encoder with no pretraining per inference modality as a baseline.
+
+## Step 4: training loss for two-tower models
+
+Paired modalities are natural views of the same sample: each sample's other modality is its positive, so no data augmentation is needed.
+
+- **`infonce`** (CLIP-style, symmetric): every other sample in the batch is a negative. When many training samples are near-duplicates of each other, those negatives are false negatives, and the loss pushes apart samples that should be close. Evidence: `profile.json` → `redundancy.<modality>.mean_fraction_of_knn_that_are_near_duplicates` and `samples_with_a_near_duplicate`, and, if labels exist, the expected number of same-class samples per batch (batch size x class fraction, from `labels.<name>.class_counts`). Low redundancy favors `infonce`. With high redundancy, prefer `vicreg` or `supcon`, or justify keeping `infonce` (e.g. a smaller batch).
+- **`vicreg`**: no negatives. Invariance between the two views plus a variance term and a covariance term that prevent collapse. Robust to redundancy. Check the collapse metrics after training (`effective_rank`, low-variance dimensions).
+- **`supcon`**: same-label samples are positives. **Needs labels on the training samples it uses.** If the objective evaluates a small labeled fraction, supcon may use only that fraction's labels, or the evaluation is leaked. It cannot be the only method when labels are missing for most samples.
+- State the batch size and temperature (for `infonce` / `supcon`) with reasons tied to the sample count and the redundancy numbers.
+
+## Step 5: baselines and comparisons (required)
+
+For each task in `objective.json`, the plan includes at least:
+- the no-pretraining single-modality baseline on the inference modality, and
+- a linear supervised baseline (logistic regression for labels, PLS regression for a cross-modal target).
+
+The learned model is judged against both, with the seed spread. A frozen pretrained encoder is reported as a reference, and as a bar only if the objective asks to beat it.
