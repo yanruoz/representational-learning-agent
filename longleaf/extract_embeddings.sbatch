@@ -1,9 +1,12 @@
 #!/bin/bash
 # Frozen-encoder embeddings for one dataset on a Longleaf GPU. Same script the Mac runs on MPS.
-# Submit from the repo root on Longleaf:
+# Compute nodes run offline, so first cache the weights on a login node (once per encoder):
+#   HF_HOME=$WORK_DIR/hf_cache $WORK_DIR/envs/repagent/bin/python scripts/extract_embeddings.py \
+#          --dataset rocov2 --download-only
+# Then submit from the repo root (ENCODER is optional; default: every encoder that applies):
 #   WORK_DIR=/work/users/${USER:0:1}/${USER:1:1}/$USER/rep-agent
 #   sbatch -p l40-gpu --output=$WORK_DIR/logs/extract_%j.log \
-#          --export=ALL,WORK_DIR=$WORK_DIR,DATASET=rocov2 longleaf/extract_embeddings.sbatch
+#          --export=ALL,WORK_DIR=$WORK_DIR,DATASET=rocov2,ENCODER=dinov2_vitb14_frozen longleaf/extract_embeddings.sbatch
 # Output: $WORK_DIR/cache/<dataset>/<encoder>/ (copy back to the Mac's cache/ with rsync)
 #SBATCH --job-name=repagent-extract
 #SBATCH --qos=gpu_access
@@ -27,4 +30,5 @@ nvidia-smi --query-gpu=name,memory.total --format=csv
   --data-root "$WORK_DIR/data" \
   --cache-root "$WORK_DIR/cache" \
   --device cuda \
-  --batch-size 128
+  --batch-size 128 \
+  ${ENCODER:+--encoder "$ENCODER"}

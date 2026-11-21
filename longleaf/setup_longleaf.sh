@@ -10,7 +10,7 @@
 #   2. Conda env at                $WORK_DIR/envs/repagent (Python 3.12, longleaf/requirements-gpu.txt)
 #   3. Writes the exact versions to longleaf/requirements-gpu.lock.txt
 #   4. Downloads both datasets to  $WORK_DIR/data/<dataset>/ (checksums verified)
-#   5. Caches BiomedCLIP weights in $WORK_DIR/hf_cache (compute nodes then need no download)
+#   5. Caches every applicable encoder's weights in $WORK_DIR/hf_cache (compute nodes run offline)
 #   6. Submits longleaf/test_gpu.sbatch; its log and JSON land in $WORK_DIR/logs/
 #
 # Home has a small quota, so the env, data, and model cache all live in /work.
@@ -62,13 +62,9 @@ done
 
 # ── 4. model weights (download only, on CPU) ──
 export HF_HOME="$WORK_DIR/hf_cache"
-"$PY" - <<'EOF'
-import open_clip
-name = "hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224"
-open_clip.create_model_from_pretrained(name)
-open_clip.get_tokenizer(name)
-print("[setup] BiomedCLIP weights cached")
-EOF
+for d in pbmc_multiome rocov2; do
+  "$PY" "$REPO/scripts/extract_embeddings.py" --dataset "$d" --download-only
+done
 
 # ── 5. test GPU job ──
 JOB=$(sbatch --parsable \
