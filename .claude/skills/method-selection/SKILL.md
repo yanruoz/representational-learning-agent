@@ -13,6 +13,29 @@ You make three choices per model, and each one is a real choice between candidat
 
 Every choice gets a `reason` and an `evidence` list. Each evidence item names a file (`profile.json` or `metrics/baseline_check.json`), a key path, and the value you read there; `validate_plan.py` checks that the value matches. A reason that would read the same for any dataset of this shape is not a reason. "Default", "standard", or "commonly used" is never a reason; the validator rejects it.
 
+## Model entry schema (plan.json → models)
+
+```json
+{
+  "id": "<short_id>", "method": "two_tower", "loss": "infonce", "label": null,
+  "inputs": {
+    "<modality>": {"encoder": "<from baseline_check candidates>", "head": "mlp", "reason": "...",
+                   "evidence": [{"file": "metrics/baseline_check.json", "key": "encoders.<modality>.<encoder>....", "value": 0.0}]}
+  },
+  "loss_reason": "...",
+  "loss_evidence": [{"file": "profile.json", "key": "redundancy.<representation>.mean_fraction_of_knn_that_are_near_duplicates", "value": 0.0}],
+  "hyperparameters": {"embed_dim": 128, "hidden_dims": [512, 256], "epochs": 300, "batch_size": 256, "lr": 0.0003, "patience": 30},
+  "hyperparameter_reasons": {"embed_dim": "...", "hidden_dims": "...", "epochs": "...", "batch_size": "...", "lr": "...", "patience": "..."},
+  "seeds": [0, 1, 2], "serves_tasks": ["cross_modal_retrieval"], "estimated_minutes": 0.5, "status": "planned", "reason": "..."
+}
+```
+
+- Baselines (`single_modality_features`, `frozen_probe`, `linear_supervised`, `linear_alignment`) need `inputs` with `encoder` and `reason` (`frozen_probe` also `evidence`), no loss, no seeds.
+- Other hyperparameters: `weight_decay`, `dropout`, `temperature_init` (infonce), `supcon_temperature`, `modality_dropout` (autoencoder, fusion), `concat_input`, `max_minutes`. Every key you set needs a reason.
+- `label`: the label a `supcon` / `cross_entropy` model trains on (default: the objective's label task). It is trained once per label budget.
+- `estimated_minutes` per run: small heads on fixed features take well under a minute on CPU for about 10k samples; label-using losses run once per budget, so multiply.
+- Status `not_run_budget` keeps a model you would run but that doesn't fit `budget_min`; the report lists it.
+
 ## Step 1: what the objective needs at prediction time
 
 Read `objective.json`: which modalities are available for **new** samples (`inference_modalities`) and which are available only for training. This rules methods in or out before anything else:
@@ -28,6 +51,7 @@ Read `objective.json`: which modalities are available for **new** samples (`infe
 | `single_modality_features` (baseline) | no | yes | via nearest neighbors in its own space | always planned for each inference modality |
 | `linear_supervised` (baseline) | yes, or a target modality | yes | yes (PLS regression) | logistic regression for labels, PLS for cross-modal targets |
 | `frozen_probe` | for the probe only | yes | no | cached encoder features + kNN / linear probe, no training |
+| `linear_alignment` (baseline) | no | yes (one projection per modality) | via nearest neighbors in the shared space | CCA; size chosen on validation; the required baseline for matching and label transfer |
 | `two_tower` | only with `supcon` | yes | via nearest neighbors in the shared space | loss: `infonce`, `vicreg`, `supcon` |
 | `multimodal_autoencoder` | no | with modality dropout | yes (decode the other modality) | reconstruction loss per modality |
 | `supervised_fusion` | yes | with modality dropout only | no | embedding = fused layer before the classifier |
@@ -51,10 +75,13 @@ Paired modalities are natural views of the same sample: each sample's other moda
 - Alignment compresses: a learned embedding usually has a much lower effective rank than its input features (`metrics/collapse.json`). If a linear probe on the frozen input beats the aligned embedding, `concat_input: true` keeps both; plan it as a separate model with a reason, not as a silent default.
 - State the batch size and temperature (for `infonce` / `supcon`) with reasons tied to the sample count and the redundancy numbers.
 
+**Sample size.** Compare the number of labeled training samples with the size of a supervised head. With a few hundred labeled samples or fewer, supervised heads and fusion classifiers overfit. Prefer label-free losses, small linear heads, and probes on fixed features, and say so in the reason.
+
 ## Step 5: baselines and comparisons (required)
 
 For each task in `objective.json`, the plan includes at least:
 - the no-pretraining single-modality baseline on the inference modality, and
 - a linear supervised baseline (logistic regression for labels, PLS regression for a cross-modal target).
+- for matching (`cross_modal_retrieval`) and `label_transfer`: a `linear_alignment` (CCA) model on no-pretraining features.
 
 The learned model is judged against both, with the seed spread. A frozen pretrained encoder is reported as a reference, and as a bar only if the objective asks to beat it.
