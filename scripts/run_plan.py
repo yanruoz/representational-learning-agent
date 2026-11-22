@@ -14,7 +14,7 @@
    - A failing model is retried once, then recorded as failed; one failure never stops the others.
      Models with status "not_run_budget" or "not_run_unavailable" are recorded, not run.
    - Writes metrics/<key>.json (per run), metrics/summary.json (mean / SD / n over seeds for every
-     numeric metric), metrics/collapse.json (learned embeddings next to their input features),
+     numeric metric; metrics averaged over label draws also get a <metric>_draw_sd entry), metrics/collapse.json (learned embeddings next to their input features),
      and run_log.json.
 """
 import argparse
@@ -39,7 +39,8 @@ def _flatten(d, prefix=""):
     out = {}
     if isinstance(d, dict):
         if set(d) >= {"mean", "sd"} and isinstance(d["mean"], (int, float)):
-            return {prefix: float(d["mean"])}
+            # the SD inside one run is over label draws; keep it next to the mean
+            return {prefix: float(d["mean"]), f"{prefix}_draw_sd": float(d["sd"])}
         for k, v in d.items():
             out.update(_flatten(v, f"{prefix}.{k}" if prefix else str(k)))
     elif isinstance(d, (int, float)) and not isinstance(d, bool):

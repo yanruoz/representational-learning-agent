@@ -11,6 +11,7 @@
      pixels_pca  image: grayscale, resized to size x size, PCA
      tfidf_svd   text: TF-IDF (sublinear, min_df) + truncated SVD
      cache:<id>  frozen pretrained encoder embeddings from cache/<dataset>/<id>/ (not refit)
+   Any encoder takes params.reduce_to = k: PCA to k components on top (fit on the fit rows).
    Results are cached in outputs/<d>/features/ keyed by encoder, params, and fit rows.
 """
 import hashlib
@@ -129,7 +130,19 @@ def available_encoders(ctx, modality):
 
 
 def featurize(ctx, modality, encoder, params=None, fit_idx=None):
+    """params may include reduce_to: k, which applies a PCA to k components (fit on the fit rows) to
+    the encoder's output. It gives a same-dimension control for a learned projection."""
     fit_idx = ctx.fit_idx if fit_idx is None else np.sort(np.asarray(fit_idx))
+    params = dict(params or {})
+    k = params.pop("reduce_to", None)
+    Z = _featurize(ctx, modality, encoder, params, fit_idx)
+    if k:
+        from sklearn.decomposition import PCA
+        Z = PCA(n_components=int(k), random_state=SEED).fit(Z[fit_idx]).transform(Z).astype(np.float32)
+    return Z
+
+
+def _featurize(ctx, modality, encoder, params, fit_idx):
     if encoder.startswith("cache:"):
         return _cached(ctx, modality, encoder.split(":", 1)[1]).astype(np.float32)
     kind = ctx.modality_kind(modality)

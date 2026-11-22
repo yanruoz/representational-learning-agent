@@ -22,7 +22,7 @@ description: Turn the free-text objective into objective.json (tasks, inference 
     {"task": "cross_modal_prediction", "source": "<m1>", "target": "<m2>"}
   ],
   "secondary_tasks": [{"task": "label_prediction", "label": "<other label>", "modality": "<m>", "label_budgets_per_class": ["all"]}],
-  "success_criterion": {"metric": "...", "baseline": "...", "comparison": "...", "reason": "..."},
+  "success_criterion": {"metric": "...", "probe": "linear | knn (label tasks)", "baseline": "...", "comparison": "...", "reason": "..."},
   "interpretation_notes": "ambiguities and how you resolved them"
 }
 ```
@@ -62,4 +62,5 @@ Other declared labels that the objective does not ask about become `secondary_ta
 - `decline` only when the data cannot answer the objective (e.g. a required modality or label is not declared). Say exactly what is missing.
 - `proceed_adapted` when you had to change the task (e.g. the objective asks for a label that does not exist, so you substitute the closest declared one). Say what changed.
 - The success criterion names the metric, the baseline it must beat (a baseline with no pretraining, a linear method such as CCA or PLS, or a single-modality model), and the comparison, including the seed spread (e.g. "lower FOSCTTM than CCA by more than the SD over seeds"). A frozen pretrained encoder is a reference, not the bar, unless the objective asks to beat it.
+- For label tasks, `success_criterion.probe` names the classifier that decides success (`linear` or `knn`), chosen **now, before any result exists**. Both are still reported; choosing after seeing test results is not allowed. Pick the one that matches how the representation would be used (a trained classifier → linear; nearest-neighbor lookup → knn) and say why.
 - If the data description says labels were derived from some modality, note in `interpretation_notes` how that biases label-based comparisons.

@@ -85,6 +85,10 @@ def validate(obj, profile, text=None):
         if not sc.get(f):
             errors.append(f"success_criterion.{f} is required (which metric, against which baseline, what margin)")
     evidence.check_reason(sc.get("reason"), "success_criterion.reason", errors)
+    prim = next((t for t in tasks if t.get("primary")), {})
+    if prim.get("task") in ("label_prediction", "label_transfer") and sc.get("probe") not in ("knn", "linear"):
+        errors.append("success_criterion.probe must name the classifier that decides success ('knn' or 'linear'), "
+                      "chosen now, before any result is seen")
     if obj.get("dataset") != profile.get("dataset"):
         errors.append("dataset does not match profile.json")
     return errors, warnings

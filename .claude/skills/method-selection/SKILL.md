@@ -43,7 +43,7 @@ Read `objective.json`: which modalities are available for **new** samples (`infe
 
 - If new samples have only one modality, the model must embed that modality **alone**. Two-tower models qualify (use that modality's tower). An autoencoder qualifies only if trained with modality dropout. Supervised fusion of all modalities does not, unless trained with modality dropout.
 - If the objective asks for one modality's values to be estimated from another (cross-modal prediction), the method needs a path from the input modality to the target: a decoder, or nearest neighbors in a shared space whose target values are averaged.
-- If the objective asks whether a training-only modality helps, plan a matched pair: the same encoder and head trained with and without that modality.
+- If the objective asks whether a training-only modality helps, plan a matched pair: the same encoder and head trained with and without that modality. A learned head also changes the dimension, so add a **same-dimension control without the partner modality**: the same encoder with `params: {"reduce_to": <embed_dim>}` (PCA to that size) as a `frozen_probe` or `single_modality_features` baseline. Then a gain can be credited to the modality, not to the projection.
 
 ## Step 2: method (capabilities)
 

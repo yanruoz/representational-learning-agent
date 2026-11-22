@@ -223,6 +223,22 @@ Time is your supervision time; I write the code during those sessions.
 - `./run.sh pbmc_multiome "<objective>" --report-number 1` and `./run.sh rocov2 "<objective>" --report-number 2`.
 - Exit check (hard deadline): both generated reports exist, end to end, even rough. Commit and push.
 
+**Tuesday milestone: done Nov 22.** `run.sh` built both reports end to end.
+- **Report 1** (PBMC): 32 pages, 11.3 min. InfoNCE on LSI gives FOSCTTM 0.0106 vs CCA 0.0152. Transfer: no clear difference from CCA (kNN), and CCA is better with the linear classifier.
+- **Report 2** (ROCOv2): 40 pages, 16.2 min (the first attempt stopped at the usage limit). Captions don't help the linear probe on DINOv2, and the kNN gain isn't credited to captions. Frozen BiomedCLIP is best (conditional, because of pretraining overlap).
+- **Fixed after the runs:**
+  - the baseline input bug;
+  - CCA seeds (90% subsamples);
+  - empty-baseline warning;
+  - revision history archive;
+  - label-draw SD in `summary.json`;
+  - `success_criterion.probe` required before results;
+  - `reduce_to` same-dimension control. PCA-64 of DINOv2 gives kNN 0.523 at 5/class, vs 0.487 frozen and about 0.598 caption-trained.
+- **Before the final runs:**
+  - readable result tables (field names are still raw);
+  - shorten the reports (32-40 pages);
+  - rerun both from clean outputs so they use these fixes.
+
 **Sun Nov 29 – Mon Nov 30.** Sync the fine-tune cache if it finished; read both reports and fix the worst problems; clean runs; fresh-clone check; `docs/report.tex` (4 pages); submission zip.
 
 ## 7. Cut list (cut from the top when behind)
