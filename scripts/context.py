@@ -4,6 +4,7 @@
    Split (plan.json -> "split"):
      {"source": "declared"}                     use the dataset's declared split (train/test)
      {"source": "random", "test_fraction": 0.2, "stratify_label": "<label>" | null}
+     {"source": "random", "test_fraction": 0.2, "group_by": "<label>"}   whole groups per side
      both take "val_fraction" (carved from training, stratified like the test split) and "seed".
    The split is written to outputs/<d>/split.json and reused, so every script sees the same one.
 
@@ -44,6 +45,17 @@ def make_split(data, spec):
             raise ValueError("split.source is 'declared' but the dataset declares no split")
         test = all_idx[data["split"] == "test"]
         train = all_idx[data["split"] != "test"]
+    elif spec["source"] == "random" and spec.get("group_by"):
+        # Whole groups (e.g. slides, patients, donors) go to one side, so near-duplicate samples from
+        # one group never straddle the split. group_by names a declared label used as the group id.
+        from sklearn.model_selection import GroupShuffleSplit
+        groups = np.array([str(g) for g in data["labels"][spec["group_by"]]], dtype=object)
+        gss = GroupShuffleSplit(n_splits=1, test_size=float(spec["test_fraction"]), random_state=seed)
+        train, test = next(gss.split(all_idx, groups=groups))
+        vf = float(spec.get("val_fraction", 0.15))
+        gss = GroupShuffleSplit(n_splits=1, test_size=vf, random_state=seed)
+        tr2, va2 = next(gss.split(train, groups=groups[train]))
+        return {"train": np.sort(train[tr2]), "val": np.sort(train[va2]), "test": np.sort(test)}
     elif spec["source"] == "random":
         strat = _strata(values, all_idx) if values is not None else None
         train, test = train_test_split(all_idx, test_size=float(spec["test_fraction"]), random_state=seed, stratify=strat)

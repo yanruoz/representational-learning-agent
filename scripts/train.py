@@ -15,6 +15,8 @@
      not early-stop: a validation loss would need more labels than the budget allows, so they train
      for the planned number of epochs.
    - Test samples are embedded after training and never touch training or model selection.
+   Hyperparameter concat_input: true saves [input features, learned embedding] (each unit-norm) as
+   the embedding, for objectives where a probe may need what the alignment compressed away.
    A wall-clock cap (plan hyperparameter max_minutes, default 3 x estimated_minutes, at least 2) stops
    any run that overruns.
 """
@@ -205,6 +207,13 @@ def train(ctx, entry, seed, budget=None, device_name="auto"):
             for i in range(0, ctx.n, 2048):
                 out.append(net.towers[m](X[m][i:i + 2048].to(device)).cpu())
             emb[m] = torch.cat(out).numpy().astype(np.float32)
+    if hp.get("concat_input"):
+        # Embedding = [unit-norm input features, unit-norm learned embedding]: alignment compresses the
+        # input (lower effective rank); keeping the input lets a probe use what the alignment dropped.
+        for m in mods:
+            raw = features.featurize(ctx, m, entry["inputs"][m]["encoder"], entry["inputs"][m].get("params"))
+            unit = lambda Z: Z / np.maximum(np.linalg.norm(Z, axis=1, keepdims=True), 1e-12)
+            emb[m] = np.concatenate([unit(raw), unit(emb[m])], axis=1).astype(np.float32)
     record = {
         "key": run_key(entry, seed, budget), "model_id": entry["id"], "method": method, "loss": loss_name,
         "seed": seed, "budget": budget, "label_use": label_info,

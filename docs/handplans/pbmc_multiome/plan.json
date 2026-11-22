@@ -1,0 +1,19 @@
+{
+  "dataset": "pbmc_multiome",
+  "revision": 1,
+  "split": {"source": "random", "test_fraction": 0.2, "stratify_label": "cell_type", "val_fraction": 0.15, "seed": 0, "reason": "hand plan"},
+  "training_pool": {"filter": "all", "reason": "hand plan"},
+  "excluded_classes": {},
+  "models": [
+    {"id": "atac_lsi", "method": "single_modality_features", "inputs": {"atac": {"encoder": "lsi"}}, "status": "planned"},
+    {"id": "cca", "method": "linear_alignment", "inputs": {"rna": {"encoder": "pca"}, "atac": {"encoder": "lsi"}}, "status": "planned"},
+    {"id": "tt_infonce", "method": "two_tower", "loss": "infonce", "inputs": {"rna": {"encoder": "pca", "head": "mlp"}, "atac": {"encoder": "lsi", "head": "mlp"}},
+     "hyperparameters": {"epochs": 300, "lr": 0.0003, "embed_dim": 128, "hidden_dims": [512, 256], "patience": 30}, "seeds": [0, 1, 2], "estimated_minutes": 0.5, "status": "planned"},
+    {"id": "tt_vicreg", "method": "two_tower", "loss": "vicreg", "inputs": {"rna": {"encoder": "pca", "head": "mlp"}, "atac": {"encoder": "lsi", "head": "mlp"}},
+     "hyperparameters": {"epochs": 300, "lr": 0.0003, "embed_dim": 128, "hidden_dims": [512, 256], "patience": 30}, "seeds": [0, 1, 2], "estimated_minutes": 1, "status": "planned"},
+    {"id": "tt_supcon", "method": "two_tower", "loss": "supcon", "inputs": {"rna": {"encoder": "pca", "head": "mlp"}, "atac": {"encoder": "lsi", "head": "mlp"}},
+     "hyperparameters": {"epochs": 60, "lr": 0.0003, "embed_dim": 128, "hidden_dims": [512, 256]}, "seeds": [0, 1, 2], "estimated_minutes": 1, "status": "planned"},
+    {"id": "mae", "method": "multimodal_autoencoder", "loss": "reconstruction", "inputs": {"rna": {"encoder": "pca", "head": "mlp"}, "atac": {"encoder": "lsi", "head": "mlp"}},
+     "hyperparameters": {"epochs": 300, "lr": 0.0003, "embed_dim": 64, "hidden_dims": [256], "modality_dropout": 0.5, "patience": 30}, "seeds": [0, 1, 2], "estimated_minutes": 1, "status": "planned"}
+  ]
+}

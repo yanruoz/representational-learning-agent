@@ -1,0 +1,12 @@
+{
+  "dataset": "pbmc_multiome",
+  "decision": "proceed",
+  "inference_modalities": ["rna", "atac"],
+  "training_only_modalities": [],
+  "tasks": [
+    {"task": "cross_modal_retrieval", "query": "atac", "gallery": "rna", "primary": true},
+    {"task": "label_transfer", "label": "cell_type", "from": "rna", "to": "atac", "label_budgets_per_class": ["all"]},
+    {"task": "label_prediction", "label": "cell_type", "modality": "atac", "label_budgets_per_class": ["all"]}
+  ],
+  "secondary_tasks": []
+}

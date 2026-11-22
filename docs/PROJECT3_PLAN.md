@@ -210,6 +210,14 @@ Time is your supervision time; I write the code during those sessions.
 - Write and submit `finetune_encoder.py` on Longleaf (runs while you are away if needed).
 - Exit check: hand plans give metrics and figures for every method on both datasets; numbers make sense against baselines.
 
+**Monday milestone: done Nov 22.**
+- Built: `context.py` (split incl. `group_by`, label draws), `features.py`, `models/nets.py`, `train.py`, `baselines.py` (incl. CCA), `evaluate_rep.py`, `baseline_check.py`, `run_plan.py`.
+- Hand plans (`docs/handplans/`) run end to end: PBMC 14 runs in 3.0 min, ROCOv2 24 runs in 2.2 min, none failed.
+- PBMC: InfoNCE FOSCTTM 0.0156 ± 0.0006 vs CCA 0.0200; transfer kNN macro-F1 0.902 vs CCA 0.881.
+- ROCOv2: captions help body-region kNN at 5 per class (0.604 vs frozen DINOv2 0.487) but not the linear probe. `concat_input` added as a plan option.
+- Dry run results are in `docs/DRYRUN_DATASETS.md`.
+- Figures (`visualize.py`) move to Tuesday with the report.
+
 **Tue Nov 24 (2 h). Agent + reports.**
 - `AGENT.md`, six skills, `rep-critic.md`, three validators, `report.py` page builders, `summary.json`.
 - `./run.sh pbmc_multiome "<objective>" --report-number 1` and `./run.sh rocov2 "<objective>" --report-number 2`.

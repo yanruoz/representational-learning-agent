@@ -10,7 +10,8 @@
 TASKS = {
     "label_prediction",        # predict a declared label from the inference modalities' embedding
     "cross_modal_prediction",  # estimate a training-only modality's values from the inference modalities
-    "cross_modal_retrieval",   # find a sample's partner in another modality
+    "cross_modal_retrieval",   # match a sample's profile in one modality to its profile in another
+    "label_transfer",          # classifier fit on one modality's embeddings, applied to another's
     "clustering",              # unsupervised structure that agrees with a label
     "joint_embedding",         # a representation for downstream use, judged by the above
 }
@@ -25,17 +26,20 @@ METHODS = {
     "single_modality_features": {"labels": False, "single": True, "paired": False, "shared_space": False, "trains": False},
     "linear_supervised":        {"labels": False, "single": True, "paired": False, "shared_space": False, "trains": False},
     "frozen_probe":             {"labels": False, "single": True, "paired": False, "shared_space": False, "trains": False},
+    "linear_alignment":         {"labels": False, "single": True, "paired": True,  "shared_space": True,  "trains": False},
     "two_tower":                {"labels": False, "single": True, "paired": True,  "shared_space": True,  "trains": True},
     "multimodal_autoencoder":   {"labels": False, "single": True, "paired": True,  "shared_space": True,  "trains": True},
     "supervised_fusion":        {"labels": True,  "single": True, "paired": True,  "shared_space": True,  "trains": True},
 }
-BASELINE_METHODS = {"single_modality_features", "linear_supervised", "frozen_probe"}
+BASELINE_METHODS = {"single_modality_features", "linear_supervised", "frozen_probe", "linear_alignment"}
+# A frozen_probe whose cached encoder was pretrained jointly on two modalities also has a shared space
+# (zero-shot retrieval); evaluate_rep is told so explicitly.
 # Which tasks each method can serve. A method serves label_prediction / clustering / joint_embedding
 # through its embedding; cross_modal_prediction through kNN averaging (all) or PLS (linear_supervised);
 # retrieval only with a shared space.
 METHOD_TASKS = {
     m: {"label_prediction", "clustering", "joint_embedding", "cross_modal_prediction"}
-       | ({"cross_modal_retrieval"} if caps["shared_space"] else set())
+       | ({"cross_modal_retrieval", "label_transfer"} if caps["shared_space"] else set())
     for m, caps in METHODS.items()
 }
 
@@ -69,6 +73,10 @@ def draws_for_budget(budget):
         return 1
     return 10 if budget <= 20 else 5
 
+
+# linear_alignment (CCA): candidate numbers of components, chosen on the validation split by FOSCTTM.
+CCA_COMPONENT_CANDIDATES = [10, 20, 30, 50]
+RECALL_KS = [1, 10, 50]
 
 # Cross-modal prediction: kNN averaging neighbors, PLS components, target features.
 KNN_PREDICT_K = 20

@@ -1,0 +1,12 @@
+{
+  "dataset": "rocov2",
+  "decision": "proceed",
+  "inference_modalities": ["image"],
+  "training_only_modalities": ["caption"],
+  "tasks": [
+    {"task": "label_prediction", "label": "body_region", "modality": "image", "label_budgets_per_class": [5, 20, 100, "all"], "primary": true}
+  ],
+  "secondary_tasks": [
+    {"task": "label_prediction", "label": "modality", "modality": "image", "label_budgets_per_class": [5, "all"]}
+  ]
+}

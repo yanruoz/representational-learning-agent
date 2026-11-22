@@ -15,8 +15,10 @@
      samples embedded from the inference modalities) of the target modality's log-normalized values;
      for linear_supervised, PLS regression from the inference features instead. Per-feature Pearson
      correlation over test samples: median, quartiles, mean, and the per-feature values (.npy).
-   Retrieval (shared-space methods with a second modality in rep): test queries from the inference
-     modality, gallery = the other modality's test embeddings; recall@1/5/10, median rank, chance.
+   Matching / retrieval (shared-space representations): FOSCTTM over both directions (chance 0.5),
+     recall@k and median rank for the task's query modality against its gallery modality, chance.
+   Label transfer (shared-space): kNN and linear classifiers fit on one modality's embeddings of
+     labeled training samples, applied to another modality's embeddings of test samples.
    Collapse: per embedding, standard deviation per dimension, the share of dimensions with SD below
      1% of the largest, and effective rank (exp of the entropy of normalized singular values), on
      test rows.
@@ -65,10 +67,11 @@ def _probe(Ztr, ytr, Zte, budget):
     return {"knn": knn, "linear": lin}
 
 
-def label_metrics(ctx, Z, label, budgets, only_budget=None):
+def label_metrics(ctx, Z, label, budgets, only_budget=None, eval_idx=None, max_draws=None):
+    """eval_idx: rows to score (default the test split; the baseline check passes validation rows)."""
     from sklearn.metrics import accuracy_score, f1_score
     vals = ctx.labels(label)
-    te = ctx.labeled(label, ctx.test)
+    te = ctx.labeled(label, ctx.test if eval_idx is None else eval_idx)
     yte = vals[te].astype(str)
     classes = sorted(set(yte))
     out = {"label": label, "n_test": int(len(te)), "classes": classes, "budgets": {}}
@@ -76,6 +79,8 @@ def label_metrics(ctx, Z, label, budgets, only_budget=None):
         if only_budget is not None and b != only_budget:
             continue
         n_draws = 1 if only_budget is not None else plan_schema.draws_for_budget(b)
+        if max_draws:
+            n_draws = min(n_draws, max_draws)
         rows = {"knn": [], "linear": [], "majority": []}
         per_class = {"knn": [], "linear": []}
         info = None
@@ -147,43 +152,93 @@ def prediction_metrics(ctx, Z, task, method, rep_features=None, key=None):
             "fraction_features_r_above_0.3": round(float(np.mean(v > 0.3)), 4)}
 
 
-def retrieval_metrics(ctx, rep, query, gallery):
-    te = ctx.test
-    Q, G = _unit(rep[query][te]), _unit(rep[gallery][te])
-    S = Q @ G.T
-    rank = (S > S[np.arange(len(te)), np.arange(len(te))][:, None]).sum(1) + 1
-    n = len(te)
-    return {"query": query, "gallery": gallery, "n": int(n),
-            **{f"recall@{k}": round(float(np.mean(rank <= k)), 4) for k in (1, 5, 10)},
-            **{f"chance_recall@{k}": round(k / n, 4) for k in (1, 5, 10)},
-            "median_rank": float(np.median(rank))}
+def matching_metrics(Q, G, rows):
+    """Q, G: two modalities' embeddings; row i of each is the same sample. FOSCTTM averages, over both
+    directions, the fraction of samples closer to the query than its true match (chance 0.5);
+    recall@k and median rank are for Q queries against the G gallery."""
+    Qn, Gn = _unit(Q[rows]), _unit(G[rows])
+    S = Qn @ Gn.T
+    d = np.diag(S)
+    f_q = (S > d[:, None]).mean(1)
+    f_g = (S > d[None, :]).mean(0)
+    rank = (S > d[:, None]).sum(1) + 1
+    n = len(rows)
+    out = {"n": int(n), "foscttm": round(float((f_q.mean() + f_g.mean()) / 2), 5), "chance_foscttm": 0.5,
+           "median_rank": float(np.median(rank))}
+    for k in plan_schema.RECALL_KS:
+        out[f"recall@{k}"] = round(float(np.mean(rank <= k)), 4)
+        out[f"chance_recall@{k}"] = round(min(1.0, k / n), 4)
+    return out
+
+
+def transfer_metrics(ctx, rep, task, budgets, only_budget=None):
+    """Classifier fit on the `from` modality's embeddings of labeled training samples, applied to
+    the `to` modality's embeddings of labeled test samples."""
+    from sklearn.metrics import accuracy_score, f1_score
+    label, src, dst = task["label"], task["from"], task["to"]
+    vals = ctx.labels(label)
+    te = ctx.labeled(label, ctx.test)
+    yte = vals[te].astype(str)
+    classes = sorted(set(yte))
+    out = {"label": label, "from": src, "to": dst, "n_test": int(len(te)), "budgets": {}}
+    for b in budgets:
+        if only_budget is not None and b != only_budget:
+            continue
+        n_draws = 1 if only_budget is not None else plan_schema.draws_for_budget(b)
+        rows = {"knn": [], "linear": []}
+        for d in range(n_draws):
+            idx, taken, unfilled = ctx.draw_labeled(label, b, d, pool=ctx.train)
+            preds = _probe(rep[src][idx], vals[idx].astype(str), rep[dst][te], b)
+            for name, yp in preds.items():
+                rows[name].append((f1_score(yte, yp, average="macro", labels=classes, zero_division=0), accuracy_score(yte, yp)))
+        res = {"draws": n_draws, "unfilled_classes": unfilled}
+        for name, r in rows.items():
+            r = np.array(r)
+            res[f"{name}_macro_f1"] = {"mean": round(float(r[:, 0].mean()), 4), "sd": round(float(r[:, 0].std()), 4)}
+            res[f"{name}_accuracy"] = {"mean": round(float(r[:, 1].mean()), 4), "sd": round(float(r[:, 1].std()), 4)}
+        out["budgets"][str(b)] = res
+    return out
 
 
 def evaluate(ctx, rep, method, key, only_budget=None, shared_space=None, rep_features=None):
+    """Tasks come from objective.tasks (+ secondary_tasks). Embeddings used per task:
+       label_prediction: task['modality'] if given, else the inference modalities (concatenated);
+       cross_modal_retrieval: task['query'] vs task['gallery'] (shared-space representations only);
+       label_transfer: task['from'] -> task['to'] (shared-space only);
+       cross_modal_prediction: task['source'] -> task['target']."""
     obj = ctx.objective
-    Z = inference_embedding(ctx, rep)
-    out = {"key": key, "method": method, "inference_modalities": obj["inference_modalities"], "tasks": {}}
+    out = {"key": key, "method": method, "inference_modalities": obj["inference_modalities"], "tasks": {}, "skipped": []}
     shared = plan_schema.METHODS[method]["shared_space"] if shared_space is None else shared_space
+
+    def emb_for(t):
+        m = t.get("modality")
+        return rep[m] if m else inference_embedding(ctx, rep)
+
     for t in obj.get("tasks", []):
         name = t["task"]
         if name == "label_prediction":
+            Z = emb_for(t)
             budgets = t.get("label_budgets_per_class", [plan_schema.BUDGET_ALL])
             out["tasks"].setdefault("label_prediction", {})[t["label"]] = label_metrics(ctx, Z, t["label"], budgets, only_budget)
             out["tasks"].setdefault("clustering", {})[t["label"]] = clustering_metrics(ctx, Z, t["label"])
         elif name == "cross_modal_prediction":
+            Z = rep[t["source"]]
             out["tasks"].setdefault("cross_modal_prediction", {})[t["target"]] = prediction_metrics(ctx, Z, t, method, rep_features, key)
-        elif name == "cross_modal_retrieval" or (name == "joint_embedding" and shared):
-            pass
-    if shared:
-        others = [m for m in rep if m not in obj["inference_modalities"]]
-        for g in others:
-            for q in obj["inference_modalities"]:
-                out["tasks"].setdefault("cross_modal_retrieval", {})[f"{q}->{g}"] = retrieval_metrics(ctx, rep, q, g)
+        elif name in ("cross_modal_retrieval", "label_transfer"):
+            needed = [t["query"], t["gallery"]] if name == "cross_modal_retrieval" else [t["from"], t["to"]]
+            if not shared or any(m not in rep for m in needed):
+                out["skipped"].append({"task": name, "why": "representation has no shared space for these modalities"})
+                continue
+            if name == "cross_modal_retrieval":
+                out["tasks"].setdefault("cross_modal_retrieval", {})[f"{t['query']}->{t['gallery']}"] = matching_metrics(rep[t["query"]], rep[t["gallery"]], ctx.test)
+            else:
+                budgets = t.get("label_budgets_per_class", [plan_schema.BUDGET_ALL])
+                out["tasks"].setdefault("label_transfer", {})[f"{t['from']}->{t['to']}"] = transfer_metrics(ctx, rep, t, budgets, only_budget)
     if only_budget is None:
         for t in obj.get("secondary_tasks", []):
             if t["task"] == "label_prediction":
                 out["tasks"].setdefault("secondary_label_prediction", {})[t["label"]] = label_metrics(
-                    ctx, Z, t["label"], t.get("label_budgets_per_class", [plan_schema.BUDGET_ALL]))
+                    ctx, emb_for(t), t["label"], t.get("label_budgets_per_class", [plan_schema.BUDGET_ALL]))
     out["collapse"] = {m: collapse(rep[m][ctx.test]) for m in rep}
     (ctx.out / "metrics").mkdir(parents=True, exist_ok=True)
     (ctx.out / "metrics" / f"{key}.json").write_text(json.dumps(out, indent=1) + "\n")

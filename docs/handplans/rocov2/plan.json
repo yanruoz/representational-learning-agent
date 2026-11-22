@@ -1,0 +1,20 @@
+{
+  "dataset": "rocov2",
+  "revision": 1,
+  "split": {"source": "declared", "stratify_label": "body_region", "val_fraction": 0.15, "seed": 0, "reason": "hand plan"},
+  "training_pool": {"filter": "all", "reason": "hand plan"},
+  "excluded_classes": {"body_region": {"classes": ["breast"], "reason": "hand plan"}},
+  "models": [
+    {"id": "pixels", "method": "single_modality_features", "inputs": {"image": {"encoder": "pixels_pca"}}, "status": "planned"},
+    {"id": "dino_frozen", "method": "frozen_probe", "inputs": {"image": {"encoder": "cache:dinov2_vitb14_frozen"}}, "status": "planned"},
+    {"id": "bmc_frozen", "method": "frozen_probe", "inputs": {"image": {"encoder": "cache:biomedclip_frozen"}, "caption": {"encoder": "cache:biomedclip_frozen"}}, "status": "planned"},
+    {"id": "tt_dino_tfidf_infonce", "method": "two_tower", "loss": "infonce", "inputs": {"image": {"encoder": "cache:dinov2_vitb14_frozen", "head": "mlp"}, "caption": {"encoder": "tfidf_svd", "head": "mlp"}},
+     "hyperparameters": {"epochs": 300, "lr": 0.0003, "embed_dim": 128, "hidden_dims": [512], "patience": 30}, "seeds": [0, 1, 2], "estimated_minutes": 1, "status": "planned"},
+    {"id": "tt_dino_tfidf_vicreg", "method": "two_tower", "loss": "vicreg", "inputs": {"image": {"encoder": "cache:dinov2_vitb14_frozen", "head": "mlp"}, "caption": {"encoder": "tfidf_svd", "head": "mlp"}},
+     "hyperparameters": {"epochs": 300, "lr": 0.0003, "embed_dim": 128, "hidden_dims": [512], "patience": 30}, "seeds": [0, 1, 2], "estimated_minutes": 1, "status": "planned"},
+    {"id": "tt_dino_bmctext_infonce", "method": "two_tower", "loss": "infonce", "inputs": {"image": {"encoder": "cache:dinov2_vitb14_frozen", "head": "mlp"}, "caption": {"encoder": "cache:biomedclip_frozen", "head": "mlp"}},
+     "hyperparameters": {"epochs": 300, "lr": 0.0003, "embed_dim": 128, "hidden_dims": [512], "patience": 30}, "seeds": [0, 1, 2], "estimated_minutes": 1, "status": "planned"},
+    {"id": "tt_dino_supcon", "method": "two_tower", "loss": "supcon", "label": "body_region", "inputs": {"image": {"encoder": "cache:dinov2_vitb14_frozen", "head": "mlp"}, "caption": {"encoder": "tfidf_svd", "head": "mlp"}},
+     "hyperparameters": {"epochs": 40, "lr": 0.0003, "embed_dim": 128, "hidden_dims": [512]}, "seeds": [0, 1, 2], "estimated_minutes": 1, "status": "planned"}
+  ]
+}
