@@ -263,6 +263,18 @@ def _primary_metric(a):
     return None, None, t
 
 
+def _plain(k):
+    """'budgets.5.linear_macro_f1' -> '5 labels/class: linear probe macro-F1'; 'recall@10' stays."""
+    names = {"knn_macro_f1": "kNN macro-F1", "linear_macro_f1": "linear probe macro-F1", "majority_macro_f1": "majority class macro-F1",
+             "foscttm": "FOSCTTM", "pearson_median": "median Pearson", "ari": "ARI", "nmi": "NMI"}
+    parts = k.split(".")
+    metric = names.get(parts[-1], parts[-1])
+    if len(parts) >= 3 and parts[0] == "budgets":
+        b = parts[1]
+        return f"{'all labels' if b == 'all' else b + ' labels/class'}: {metric}"
+    return metric
+
+
 def _models(a):
     return {m["id"]: m for m in a["plan"].get("models", [])}
 
@@ -410,12 +422,29 @@ def results_pages(a):
     blocks = []
     for g, rows in groups.items():
         lines = []
+        maj = None
         for name, mets in rows.items():
             lines.append(f"{name}:")
-            for k, v in sorted(mets.items()):
+            def order(kv):
+                parts = kv[0].split(".")
+                if len(parts) >= 2 and parts[0] == "budgets":
+                    return (0, 10**9 if parts[1] == "all" else int(parts[1]), kv[0])
+                return (1, 0, kv[0])
+            for k, v in sorted(mets.items(), key=order):
+                if k.endswith("_draw_sd"):
+                    continue
+                if k.endswith("majority_macro_f1"):
+                    maj = maj or {}
+                    maj[_plain(k).split(":")[0]] = v["mean"]
+                    continue
                 if any(x in k for x in ("macro_f1", "foscttm", "recall@", "pearson_median", "ari", "nmi")):
-                    lines.append(f"    {k:42s} {_ms(v)}")
-        blocks.append((g.replace(".", ": "), ["```" + "\n".join(lines) + "```"]))
+                    dsd = mets.get(f"{k}_draw_sd")
+                    extra = f"  (label-draw SD {dsd['mean']:.4f})" if dsd and dsd["mean"] > 0 else ""
+                    lines.append(f"    {_plain(k):40s} {_ms(v)}{extra}")
+        if maj:
+            lines.append("reference, majority class macro-F1: " + ", ".join(f"{b} {v:.4f}" for b, v in maj.items()))
+        blocks.append((g.replace("_", " ").replace(".", ": "), ["```" + "\n".join(lines) + "```",
+                       "Mean ± SD over seeds (n = seeds); label-draw SD is the spread over the random choice of labeled examples within one run."]))
     clus = [(n, r["metrics"]) for n, r in summ.items() if any(k.startswith("clustering") for k in r["metrics"])]
     if clus:
         blocks.append(("clustering (KMeans on test embeddings)", ["```" + "\n".join(
