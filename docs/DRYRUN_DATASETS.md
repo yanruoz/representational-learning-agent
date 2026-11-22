@@ -6,17 +6,28 @@ Dev-only. These two datasets are never downloaded or run. On Monday we use them 
 
 Histopathology image patches paired with spatial transcriptomics: each spot has an image tile and a gene-expression profile.
 
-**Objective (to be supplied):**
+**Objective:**
 
-> _TODO: objective text from the user._
+> From a few slides of one tissue, learn a joint representation of H&E patches and spot gene expression so marker-gene expression can be predicted from histology on an unseen slide.
+
+**Notes:**
+- Split by slide, not by spot: neighboring spots on one slide are near-duplicates, so a spot-level split leaks.
+- The strong pathology encoders (UNI, CONCH) are gated (access must be requested), so the registry would offer only openly available image encoders.
+- Expected shape: inference modality image, training-only modality expression, task cross-modal prediction (per-gene Pearson on held-out slides), with a group-aware split.
 
 ## TCGA-BRCA
 
 Breast cancer histopathology whole-slide images paired with clinical variables per patient.
 
-**Objective (to be supplied):**
+**Objective:**
 
-> _TODO: objective text from the user._
+> Using images and clinical variables, learn a patient representation that predicts molecular subtype better than clinical variables alone.
+
+**Notes:**
+- About 1,000 patients have slide images on GDC. The TCIA collection hosts MRI for only about 140 patients.
+- Small n. Whole-slide images need tile features and multiple-instance learning (many tiles per patient, one label).
+- Split by patient.
+- Expected shape: inference modalities image and clinical (both available at prediction time), task label prediction, baseline clinical variables alone.
 
 ## What the dry run checks (per dataset)
 

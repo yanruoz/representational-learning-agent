@@ -10,6 +10,17 @@ Project 3: an agent for multimodal representation learning (BIOS774). Spec: `doc
 - Work sessions: about 2 hours each on Sun Nov 22, Mon Nov 23, and Tue Nov 24. Mostly away Nov 25 to Sun Nov 29.
 - By the end of **Tue Nov 24**, `run.sh` must produce `generated_report_1` and `generated_report_2` end to end, even if rough.
 
+## Working rule: milestones are an order, not dates
+The dates in `docs/PROJECT3_PLAN.md` §6 give an order, not gates. When a milestone is done, commit it and go straight to the next one without waiting for its day. The user pushes when they check in.
+
+Stop and ask the user only when:
+- a decision would change the objectives (`docs/OBJECTIVES.md`) or the scope;
+- an action can't be undone;
+- you need Longleaf or anything else only the user can do;
+- tests fail and one bounded fix didn't work.
+
+Otherwise decide, record the decision and its reason (in the commit message or the plan), and keep going.
+
 ## Hard rules
 - **The pipeline never reads `docs/**`, `longleaf/**`, `README.md`** (it has the run commands with the objectives), or this file. Enforce this with deny rules in `.claude/pipeline-settings.json` and a check in `tests/test_settings.py`, not only with a prompt instruction. Reason: in Project 2, dataset details leaked into the agent's instructions, so its decisions could look pre-written.
 - Skills, `AGENT.md`, and script comments stay generic: no dataset names, genes, counts, or numbers from these datasets. Dataset facts belong only in `data/<d>/DATA_DESCRIPTION.md`.

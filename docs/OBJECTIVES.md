@@ -19,9 +19,11 @@ Dev-only. The pipeline cannot read this file (`docs/**` is denied) or `README.md
 
 **Objective (passed verbatim):**
 
-> Our archive has captions for every figure but expert labels for only a few. Learn image representations that identify imaging modality (and body region or finding if there are enough examples) from the image alone when only a small fraction of images is labeled, and tell me whether using captions during training helps.
+> Our archive has captions for every radiograph but expert labels for only a few. Learn image representations that identify the body region from the image alone when only a few labeled examples per region are available, and tell me whether using the captions during training helps.
 
-**Concept counts beyond modality** (this subset; train / test / total). All are on plain X-ray images. The copy keeps at most 3 concepts per image (modality, body region, view direction), so there are **no finding concepts**.
+(Changed on Nov 22 from imaging modality to body region: frozen image features already identify modality almost perfectly, see below.)
+
+**Concept counts beyond modality** (this subset; train / test / total). All are on plain X-ray images. The copy keeps at most 3 concepts per image (modality, body region, view direction), so there are no finding concepts.
 
 | Code | Kind | Meaning | Train | Test | Total |
 |---|---|---|---|---|---|
@@ -30,8 +32,8 @@ Dev-only. The pipeline cannot read this file (`docs/**` is denied) or `README.md
 | C0023216 | body region | lower limb | 302 | 71 | 373 |
 | C0000726 | body region | abdomen | 277 | 43 | 320 |
 | C0030797 | body region | pelvis | 194 | 32 | 226 |
-| C1140618 | body region | upper limb | 167 | 26 | 193 |
 | C0037949 | body region | spine | 172 | 19 | 191 |
+| C1140618 | body region | upper limb | 167 | 26 | 193 |
 | C0006141 | body region | breast | 9 | 4 | 13 |
 | C1999039 | view | anteroposterior | 1080 | 213 | 1293 |
 | C1996865 | view | posteroanterior | 544 | 72 | 616 |
@@ -40,17 +42,19 @@ Dev-only. The pipeline cannot read this file (`docs/**` is denied) or `README.md
 
 The names come from UMLS and were checked against the most common words in the matching captions. C0205106's exact meaning is unconfirmed.
 
-**Proposed label set:**
-- `modality`: 6 classes on all labeled images (10,451). PET has 5 test images; report its F1 separately or merge it, with a reason.
-- `body_region`: X-ray images only, 7 regions (breast left out: 13 examples, 4 in the test split). 2,855 images; 19 to 155 test images per class. At 1% labels this is about 24 labeled training images across 7 classes, so the 1% result for body region is expected to be noisy.
-- Not proposed: view direction (not asked for) and findings (none in this copy).
+**Label budgets (per class, not percentages): 5, 20, 100, and all.** Checked against the counts above:
+- Seven regions can fill every budget. With 15% of training held out for validation (for model selection and the baseline check), the smallest training class has 141 images (upper limb), so 100 per class fits.
+- Test classes have 19 (spine) to 155 (chest) images. Per-class F1 for spine and upper limb rests on 19 and 26 images.
+- **Breast** has 9 training and 4 test images, so it can fill only the 5 budget. It stays declared, and the profile flags it as a small class. Dropping or keeping it is the agent's decision, with a reason.
 
-Both labels are declared in `data/rocov2/DATA_DESCRIPTION.md`, including breast. The profile flags breast as a class with under 20 examples, so dropping it is the agent's decision, with that evidence.
+**Training pool for captions.** Captions are used in training only; test inputs are images alone. Body region exists only on X-ray images (2,513 training pairs), but captions exist for all 8,884 training pairs. Training the caption-aligned image model on all pairs or on X-ray only is the agent's choice, with a reason (more pairs vs pairs closer to the target domain).
 
-**Intended evaluation** (image only on the official test split; captions are used in training only):
-- For each label: linear probe (and kNN) macro-F1 on the test set, training the probe on 1%, 10%, and 100% of the labeled training images. Draw the labeled subsets stratified by class with at least one example per class, with several seeds at 1% and 10%.
-- "Do captions help": compare the same image encoder with and without caption-based training. The cleanest pair is DINOv2 (never trained on captions): frozen features vs a caption-aligned head trained on them. BiomedCLIP's image tower was itself trained with captions, so it is a reference, not a clean "no captions" condition.
-- Baselines: majority class; downsampled-pixel PCA (no pretraining).
+**Intended evaluation** (image only, on the official test split):
+- Body-region macro-F1 and per-class F1 from a kNN classifier and a linear probe on the image embedding, fit on 5, 20, or 100 labeled training images per class (seeded, stratified draws; several draws for the small budgets), or on all labeled training images.
+- **"Do captions help":** the same image encoder with and without caption-based training at each budget. The clean pair is DINOv2 (never trained on text): frozen features vs a DINOv2 image tower aligned to captions. BiomedCLIP's image tower was trained with captions, so it is a reference, not a clean "no captions" condition.
+- Baselines: majority class; downsampled-pixel PCA (no pretraining); logistic regression on the frozen features.
+
+**Secondary result: imaging modality.** On 252 test images, 1-NN leave-one-out modality accuracy from frozen features is 0.956 (BiomedCLIP) and 0.948 (DINOv2), against 0.409 for the majority class. The report should state as a finding that frozen image features already separate modality, so captions have little room to help there. Mechanism: the objective-interpretation skill tells the agent to evaluate other declared labels with a frozen probe as secondary results (generic rule, no dataset names).
 
 **Evidence already in the profile** (seeded sample of 3,000; near-duplicate = cosine ≥ 0.95; share of the 10 nearest neighbors that are near-duplicates, vs the share of random pairs above the cutoff):
 
@@ -63,16 +67,24 @@ Both labels are declared in `data/rocov2/DATA_DESCRIPTION.md`, including breast.
 | (PBMC) RNA, PCA | 0.0067 | 0.0 |
 | (PBMC) ATAC, PCA | 0.0 | 0.0 |
 
-In DINOv2 space many images sit almost on top of each other (similar-looking scans), so a two-tower model built on DINOv2 features faces InfoNCE false negatives. That gives the agent a real reason to consider `vicreg`. In every other representation, near-duplicates are rare.
+In DINOv2 space many images sit almost on top of each other, so a DINOv2-based two-tower model faces InfoNCE false negatives. That gives the agent a real reason to consider `vicreg`.
 
-**Frozen features are already strong for modality:** 1-NN leave-one-out accuracy on 252 test images is 0.956 (BiomedCLIP) and 0.948 (DINOv2), against 0.409 for the majority class. Captions may not help modality. Body region is where an effect is more likely.
+**What should count as success:** at 5 and 20 labels per class, a caption-trained image representation beats the same encoder's frozen features on body-region macro-F1 by more than the spread over label draws and seeds. At 100 and all, the gap may close; that is an acceptable, informative result. Risks: pretraining overlap for BiomedCLIP (PubMed Central); small test classes (spine 19, upper limb 26).
 
-**What should count as success:** at 1% and 10% labels, a caption-trained image representation beats the same encoder's frozen features on modality macro-F1 by more than the seed spread. At 100% the gap may close; that is an acceptable, informative result. Risks: pretraining overlap for BiomedCLIP (PubMed Central), and the 1% body-region condition has very few labels.
+## Validator expectations
+
+What `validate_objective.py` and `validate_plan.py` must enforce for these objectives (implemented generically, never by dataset name):
+- **Label budgets** in `objective.json` are per class (`label_budgets_per_class`, integers plus `"all"`). Each integer budget must be fillable by every retained class's training count after the validation carve-out. Classes that can't fill it must be excluded by the plan, with a reason, or flagged in the report as "budget not filled".
+- **Inference vs training-only modalities.** `inference_modalities` (ATAC; image) and `training_only_modalities` (RNA; caption). No evaluation input may come from a training-only modality, and no metric may use a training-only modality of a test sample.
+- **Label use.** Methods that use labels in representation training (`supcon`, `supervised_fusion`) may use only labels inside the budget being evaluated. Each budget gets its own model.
+- **Training pool.** `plan.json` → `training_pool` (all paired training samples, or only samples with a given label present) has a reason.
+- **Class exclusions.** `plan.json` → `excluded_classes` (e.g. a class under the small-class flag) has a reason that cites the profile counts.
+- **Secondary labels.** Other declared labels appear in `objective.json` → `secondary_tasks`, evaluated with frozen probes only.
 
 ## Run commands
 
 ```
 ./run.sh pbmc_multiome "Future samples will be profiled with scATAC-seq only. Using this paired RNA+ATAC data, learn a representation that lets ATAC-only cells be annotated by cell type and have their gene expression estimated, and show how much better that is than working from ATAC alone." --report-number 1
 
-./run.sh rocov2 "Our archive has captions for every figure but expert labels for only a few. Learn image representations that identify imaging modality (and body region or finding if there are enough examples) from the image alone when only a small fraction of images is labeled, and tell me whether using captions during training helps." --report-number 2
+./run.sh rocov2 "Our archive has captions for every radiograph but expert labels for only a few. Learn image representations that identify the body region from the image alone when only a few labeled examples per region are available, and tell me whether using the captions during training helps." --report-number 2
 ```

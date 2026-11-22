@@ -161,6 +161,7 @@ Every metric is written next to its baselines (single-modality features, linear 
 - Cached encoders need a complete manifest matching the data checksums.
 - Each task has both required baselines.
 - Every encoder, head, loss, and hyperparameter has a reason, and every evidence value matches its file.
+- Objective-specific expectations (label budgets fillable per class, inference vs training-only modalities, per-budget label use, training pool, class exclusions, secondary labels): see `docs/OBJECTIVES.md` → Validator expectations.
 
 ## 5. Objectives
 
@@ -171,17 +172,17 @@ Full text, intended evaluation, and success criteria are in `docs/OBJECTIVES.md`
   - per-gene Pearson on highly variable genes vs kNN-in-ATAC-LSI averaging and PLS (ATAC-LSI → expression).
 
   Profile evidence: low redundancy (RNA: 4% of cells have a near-duplicate at cosine 0.95; ATAC: none), so `infonce` false negatives are not expected from near-duplicates. The largest class is 27% of cells, though, so same-class negatives are common in any batch. This is a real `infonce` vs `vicreg` choice.
-- **rocov2** (report 2): imaging modality (and body region, X-ray only) **from the image alone** with 1%, 10%, 100% of training labels; do captions used in training help?
-  - Image-only test-set macro-F1.
+- **rocov2** (report 2): **body region** from the image alone with **5, 20, 100, or all labeled images per class**; do captions used in training help?
+  - Image-only test-set macro-F1 at each budget.
   - Matched pair: frozen DINOv2 vs a DINOv2 image tower aligned to captions. DINOv2 never saw captions, so this comparison is clean.
   - BiomedCLIP as a reference: its image tower was trained with captions, and PubMed Central is the source of both, so pretraining overlap is a risk.
-  - Baselines: majority class and pixel PCA.
+  - Baselines: majority class, pixel PCA, and logistic regression on frozen features.
+  - The agent chooses the caption training pool (all 8,884 pairs or the 2,513 X-ray pairs) with a reason. Breast (9 train / 4 test) is the agent's call.
+  - Imaging modality is a secondary result (frozen probe only).
 
-  Profile evidence: near-duplicates are rare for captions and BiomedCLIP images (0.5% or less of the 10 nearest neighbors). In DINOv2 space, though, 18.8% are near-duplicates, against 0.5% of random pairs above the cutoff. So a DINOv2-based two-tower model faces InfoNCE false negatives, which makes `vicreg` a real option.
+  Profile evidence: near-duplicates are rare for captions and BiomedCLIP images (0.8% or less of the 10 nearest neighbors). In DINOv2 space, though, 18.8% are near-duplicates, against 0.5% of random pairs above the cutoff. So a DINOv2-based two-tower model faces InfoNCE false negatives, which makes `vicreg` a real option.
 
-  Label set: `modality` (6 classes), `body_region` (7 regions, X-ray only; breast has 13 examples and is the agent's call). No finding concepts exist in this copy. Counts are in `docs/OBJECTIVES.md`.
-
-**Risk seen in the first check.** On 252 test images, 1-NN leave-one-out modality accuracy from frozen features is already 0.956 (BiomedCLIP) and 0.948 (DINOv2), against 0.409 for the majority class. Little room is left for captions to help modality, even at 1% labels. Body region is harder, with fewer labels, so it is more likely to show an effect. "Captions don't help modality, because frozen image features already separate it" is an acceptable finding if the evidence shows it.
+**Why body region, not modality (changed Nov 22).** On 252 test images, 1-NN leave-one-out modality accuracy from frozen features is already 0.956 (BiomedCLIP) and 0.948 (DINOv2), against 0.409 for the majority class. That left no room to show a caption effect on modality, so modality became a secondary finding.
 
 **Limitations to carry into report.pdf and both generated reports:**
 - Pretraining overlap: BiomedCLIP was trained on PubMed Central figure-caption pairs, the same source as ROCOv2. Frozen and fine-tuned BiomedCLIP results can be inflated. DINOv2 and the no-pretraining baselines don't share this risk to the same degree.

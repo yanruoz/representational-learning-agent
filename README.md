@@ -15,7 +15,7 @@ From the repo root:
 ```
 ./run.sh pbmc_multiome "Future samples will be profiled with scATAC-seq only. Using this paired RNA+ATAC data, learn a representation that lets ATAC-only cells be annotated by cell type and have their gene expression estimated, and show how much better that is than working from ATAC alone." --report-number 1
 
-./run.sh rocov2 "Our archive has captions for every figure but expert labels for only a few. Learn image representations that identify imaging modality (and body region or finding if there are enough examples) from the image alone when only a small fraction of images is labeled, and tell me whether using captions during training helps." --report-number 2
+./run.sh rocov2 "Our archive has captions for every radiograph but expert labels for only a few. Learn image representations that identify the body region from the image alone when only a few labeled examples per region are available, and tell me whether using the captions during training helps." --report-number 2
 ```
 
 Each command:
