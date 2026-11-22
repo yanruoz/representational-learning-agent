@@ -35,6 +35,7 @@ This is not a benchmark. Your job is to decide **how** the modalities should be 
 7. **Execute.** `venv/bin/python scripts/run_plan.py outputs/<dataset>/plan.json`, then `venv/bin/python scripts/visualize.py --dataset <dataset>`. Read `run_log.json`. For a failed model, decide whether one plan fix is warranted; if so, bump `revision`, re-validate, and rerun (finished runs are reused).
 8. **Look at the results** before judging them: `metrics/summary.json`, `metrics/collapse.json`, `runs/*.json`, and every PNG in `outputs/<dataset>/figures/`.
 9. **Critique.** Dispatch the critic with the Agent tool (`subagent_type: "rep-critic"`). Give it only these paths: `objective.json`, `plan.json`, `metrics/summary.json`, `metrics/collapse.json`, `metrics/baseline_check.json`, `run_log.json`, `runs/`, the figure paths, and `data/<dataset>/DATA_DESCRIPTION.md`. Never pass your own reasoning. It writes `outputs/<dataset>/critique.json`. Address every finding with **one** plan revision (bump `revision`, set `critique_applied` to what changed and why), re-validate, rerun `run_plan.py` and `visualize.py`, and move on. A finding with no plan-level fix becomes a limitation in `findings.md`. If the critic writes nothing, say so in `findings.md` and continue.
+    After the rerun, write `outputs/<dataset>/critique_response.json`: one entry per critic finding, `{"finding_title", "severity", "change", "effect_on_final"}`. `change` says what the revision did (or "stated as a limitation"); `effect_on_final` gives the effect with **final** numbers only (from the final `metrics/summary.json`). The report shows this table, not the critique's own numbers, which describe the revision it reviewed.
 10. **Recommend downstream use.** Read `.claude/skills/downstream-use/SKILL.md`. Write `outputs/<dataset>/recommendation.json`, then `venv/bin/python scripts/validate_recommendation.py outputs/<dataset>/recommendation.json` until it passes. That also exports `embeddings.npy`, `embedding_index.csv`, and `summary.json` for other tools.
 11. **Report.** Read `.claude/skills/reporting/SKILL.md`. Write `outputs/<dataset>/findings.md`, run `venv/bin/python scripts/report.py --dataset <dataset> --report-number <N>`, and look at the page images in `outputs/<dataset>/report_pages/`.
 12. **Self-check** (below), then give the final response.
@@ -63,7 +64,7 @@ Run any script with `--help` for its flags.
 - [ ] No test-time input came from a training-only modality.
 - [ ] Pretraining overlap, label construction, and other caveats from the data description are in the limitations where they apply.
 - [ ] You looked at the figures and the rendered report pages, not just exit codes.
-- [ ] `critique.json` exists and every finding was addressed by the one revision or stated as a limitation.
+- [ ] `critique.json` exists, every finding was addressed by the one revision or stated as a limitation, and `critique_response.json` records each with final numbers.
 - [ ] `reports/<dataset>/generated_report_<N>.pdf` exists.
 
 ## Final response

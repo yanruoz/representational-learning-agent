@@ -1,25 +1,31 @@
 """Assemble reports/<dataset>/generated_report_<N>.pdf from the artifacts in outputs/<dataset>/.
-   The only file in reports/ is the PDF; this script is the only thing that writes there.
+   This script is the only thing that writes reports/.
 
    Usage: venv/bin/python scripts/report.py --dataset <d> --report-number <N>
 
-   Pages (built from JSON; the agent writes only findings.md). A Contents page comes first:
-     Summary                      objective (verbatim), decision, headline table vs baselines, verdicts
-     How to read this report      abbreviations, split, seeds and label draws, what "±" means
-     Objective interpretation     objective.json: tasks, inference vs training-only modalities, criterion
-     Data and split               profile.json, split sizes, training pool, excluded classes, reasons
-     Evidence before choosing     metrics/baseline_check.json (validation split only)
-     Methods: encoders and losses every model: method, per-modality encoder and head, training loss,
-                                  each with its reason and the evidence it cites (hyperparameter
-                                  reasons are in an appendix at the end)
-     Results                      metrics/summary.json per task, mean ± SD over seeds
-     Training and collapse        runs/*.json and metrics/collapse.json
-     Figures, Findings (findings.md), Downstream use (recommendation.json), Critique, Limitations,
-     Reproducibility
-   Every decimal number in findings.md must match a value in the JSON artifacts at the precision
-   written, or the script exits 1 without writing (--allow-untraced overrides and lists them under
-   Limitations). Pages are also saved as PNGs in outputs/<d>/report_pages/ for inspection.
-   Text-page machinery (measured-width wrapping, contents, page numbers) is copied from Project 2.
+   Structure (each fact stated once; target 10-12 pages, hard cap MAX_PAGES):
+     Contents
+     Summary            objective (verbatim), short answer (findings.md "## Answer"), primary-task table,
+                        chosen representation and one line per use verdict
+     Setup              objective interpretation, data, split, classes; abbreviations
+     Decisions          one table: decision | choice | evidence | alternative rejected (internal ids only
+                        here); each distinct reason stated once below it
+     Results            primary-task table first, then the other tasks, secondary labels, collapse.
+                        Readable model labels; identical baselines merged; 3 significant figures
+     Figures            two per page, each caption with a one-sentence takeaway computed from the data
+     Findings           findings.md (evidence sections; its Answer and Limitations go elsewhere)
+     Downstream use     use cases, verdict, one line of reason, no numbers restated
+     Critique           table: finding | severity | what changed | effect on the final result
+                        (critique_response.json, final numbers only; the full critique stays in critique.json)
+     Limitations        one section: data caveats, pretraining overlap, run issues, findings.md's own list
+     Reproducibility    half a page pointing to the files that hold logs, hashes, hyperparameters
+   Machine-oriented material (evidence path = value lines, per-seed logs, config hashes,
+   hyperparameter reasons) goes to deliverables files, not the PDF (scripts/package_deliverables.py).
+
+   Every decimal number in findings.md and critique_response.json must match a value in the JSON
+   artifacts at the precision written, or the script exits 1 without writing (--allow-untraced
+   overrides and lists them under Limitations). Above MAX_PAGES it also exits 1 without writing.
+   Pages are saved as PNGs in outputs/<d>/report_pages/. Text-page machinery is from Project 2.
 """
 import argparse
 import json
@@ -36,6 +42,9 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.font_manager import FontProperties
 from matplotlib.textpath import TextToPath
+
+import labels
+import plan_schema
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGE_SIZE = (8.5, 11)
@@ -186,413 +195,421 @@ def _numbers_in(obj, acc):
 
 # ── Artifacts ──
 
+MAX_PAGES = 15
+
+
 def load_all(dataset):
     out = ROOT / "outputs" / dataset
     a = {"out": out, "dataset": dataset}
     for k, f in [("profile", "profile.json"), ("objective", "objective.json"), ("plan", "plan.json"), ("run_log", "run_log.json"),
-                 ("recommendation", "recommendation.json"), ("critique", "critique.json"), ("summary", "metrics/summary.json"),
-                 ("collapse", "metrics/collapse.json"), ("baseline_check", "metrics/baseline_check.json"), ("contract", "summary.json"),
-                 ("split", "split.json")]:
-        a[k] = _load(out / f, {} if k not in ("recommendation", "critique") else None)
+                 ("recommendation", "recommendation.json"), ("critique", "critique.json"), ("critique_response", "critique_response.json"),
+                 ("summary", "metrics/summary.json"), ("collapse", "metrics/collapse.json"), ("baseline_check", "metrics/baseline_check.json"),
+                 ("contract", "summary.json"), ("split", "split.json")]:
+        a[k] = _load(out / f, None if k in ("recommendation", "critique", "critique_response") else {})
     a["findings"] = _load(out / "findings.md", "")
     a["desc"] = _load(ROOT / "data" / dataset / "DATA_DESCRIPTION.md", "")
     ok = [r["key"] for r in (a["run_log"] or {}).get("runs", []) if r.get("status") in ("ok", "reused")]
     a["runs"] = {k: _load(out / "runs" / f"{k}.json") for k in ok if (out / "runs" / f"{k}.json").exists()}
     a["metrics"] = {k: _load(out / "metrics" / f"{k}.json") for k in ok if (out / "metrics" / f"{k}.json").exists()}
+    a["labels"] = labels.model_labels(a["plan"], a["objective"])
     return a
 
 
-def untraced_numbers(text, a):
+def number_pool(a):
     pool = []
     for k in ("profile", "summary", "collapse", "baseline_check", "plan", "run_log", "recommendation", "split"):
         _numbers_in(a.get(k) or {}, pool)
     _numbers_in(list(a["metrics"].values()), pool)
     _numbers_in(list(a["runs"].values()), pool)
+    return pool
+
+
+def untraced_numbers(text, a, pool=None):
+    pool = number_pool(a) if pool is None else pool
     missing = []
     for m in re.finditer(r"(?<![\w.])(-?\d+\.\d+)(%?)", text):
-        s, pct = m.group(1), m.group(2) == "%"
-        q, dec = float(s), len(s.split(".")[1])
+        s_, pct = m.group(1), m.group(2) == "%"
+        q, dec = float(s_), len(s_.split(".")[1])
         cands = [q, q / 100] if pct else [q]
         if not any(any(round(v, d) == round(c, d) for v in pool) for c, d in zip(cands, [dec, dec + 2])):
             missing.append(m.group(0))
     return sorted(set(missing))
 
 
-# ── Helpers ──
+def sections_of(md):
+    """{heading: text} of a markdown file's '## ' sections."""
+    out, head, buf = {}, None, []
+    for line in (md or "").splitlines():
+        if line.startswith("## "):
+            if head is not None:
+                out[head] = "\n".join(buf).strip()
+            head, buf = line[3:].strip(), []
+        else:
+            buf.append(line)
+    if head is not None:
+        out[head] = "\n".join(buf).strip()
+    return out
+
+
+def _paras(text):
+    return [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+
 
 GLOSSARY = [
-    ("kNN", "k-nearest-neighbor classifier (cosine distance) fit on the labeled training embeddings"),
-    ("linear probe", "logistic regression on standardized embeddings, fit on the labeled training embeddings"),
-    ("macro-F1", "F1 score averaged over classes with equal weight, so small classes count as much as large ones"),
-    ("FOSCTTM", "fraction of samples closer than the true match: for each held-out sample, the share of other held-out samples whose other-modality embedding is closer than its own; averaged over both directions. 0 is perfect, 0.5 is chance"),
-    ("recall@k", "share of held-out queries whose true partner is among the k nearest in the other modality"),
-    ("ARI / NMI", "adjusted Rand index / normalized mutual information between KMeans clusters and the labels"),
-    ("effective rank", "exp of the entropy of the normalized singular values of an embedding; how many directions carry variance. Far below the input's suggests collapse"),
-    ("PCA / LSI / SVD", "principal component analysis / latent semantic indexing (TF-IDF then truncated singular value decomposition)"),
-    ("TF-IDF", "term frequency times inverse document frequency weighting"),
-    ("CCA", "canonical correlation analysis: the linear projections of two modalities that are most correlated (linear alignment baseline)"),
-    ("PLS", "partial least squares regression (linear supervised baseline for cross-modal prediction)"),
-    ("InfoNCE", "contrastive loss (CLIP-style): each sample's other modality is its positive, other samples in the batch are negatives"),
-    ("VICReg", "variance-invariance-covariance loss: pulls paired embeddings together without negatives; variance and covariance terms prevent collapse"),
-    ("SupCon", "supervised contrastive loss: same-label samples are also positives (uses labels in training)"),
-    ("budget", "number of labeled training examples per class used to fit a probe (and, for label-using losses, the model)"),
+    ("kNN / linear probe", "nearest-neighbor classifier (cosine) / logistic regression, fit on labeled training embeddings"),
+    ("macro-F1", "F1 averaged over classes with equal weight"),
+    ("FOSCTTM", "fraction of samples closer than the true match (0 perfect, 0.5 chance)"),
+    ("recall@k", "share of queries whose true partner is among the k nearest in the other modality"),
+    ("ARI / NMI", "agreement of KMeans clusters with the labels"),
+    ("effective rank", "how many directions carry an embedding's variance; far below its input's suggests collapse"),
+    ("PCA, LSI, TF-IDF, CCA, PLS", "principal components; TF-IDF + truncated SVD; term weighting; canonical correlation (linear alignment); partial least squares"),
+    ("InfoNCE / VICReg / SupCon", "contrastive loss with in-batch negatives / loss without negatives (variance and covariance terms) / contrastive loss with same-label positives"),
+    ("budget", "labeled training examples per class used to fit a probe"),
 ]
 
 
-def _f(v, d=4):
-    return "-" if v is None else (f"{v:.{d}f}" if isinstance(v, float) else str(v))
-
-
-def _ms(m):
-    return f"{m['mean']:.4f} ± {m['sd']:.4f}" + (f" (n={m['n']})" if m.get("n", 1) > 1 else "")
-
-
-def _primary_metric(a):
-    obj = a["objective"]
-    t = next((t for t in obj.get("tasks", []) if t.get("primary")), None)
+def _primary(a):
+    t = next((t for t in a["objective"].get("tasks", []) if t.get("primary")), None)
     if not t:
-        return None, None, None
+        return None, None
     if t["task"] == "cross_modal_retrieval":
-        return f"cross_modal_retrieval.{t['query']}->{t['gallery']}.foscttm", "FOSCTTM (lower is better)", t
+        return f"cross_modal_retrieval.{t['query']}->{t['gallery']}", t
     if t["task"] == "label_transfer":
-        return f"label_transfer.{t['from']}->{t['to']}.budgets.all.knn_macro_f1", "transfer kNN macro-F1", t
+        return f"label_transfer.{t['from']}->{t['to']}", t
     if t["task"] == "label_prediction":
-        b = str(t.get("label_budgets_per_class", ["all"])[0])
-        return f"label_prediction.{t['label']}.budgets.{b}.linear_macro_f1", f"linear-probe macro-F1 at budget {b}", t
-    if t["task"] == "cross_modal_prediction":
-        return f"cross_modal_prediction.{t['target']}.pearson_median", "median per-feature Pearson", t
-    return None, None, t
+        return f"label_prediction.{t['label']}", t
+    return f"{t['task']}.{t.get('target', '')}", t
 
 
-def _plain(k):
-    """'budgets.5.linear_macro_f1' -> '5 labels/class: linear probe macro-F1'; 'recall@10' stays."""
-    names = {"knn_macro_f1": "kNN macro-F1", "linear_macro_f1": "linear probe macro-F1", "majority_macro_f1": "majority class macro-F1",
-             "foscttm": "FOSCTTM", "pearson_median": "median Pearson", "ari": "ARI", "nmi": "NMI"}
-    parts = k.split(".")
-    metric = names.get(parts[-1], parts[-1])
-    if len(parts) >= 3 and parts[0] == "budgets":
-        b = parts[1]
-        return f"{'all labels' if b == 'all' else b + ' labels/class'}: {metric}"
-    return metric
+def _table(header, rows, w0=None, w=13):
+    w0 = w0 or min(52, max([len(header[0])] + [len(r[0]) for r in rows]) + 2)
+    rows = [[r[0] if len(r[0]) < w0 else r[0][: w0 - 2] + "…"] + list(r[1:]) for r in rows]
+    lines = [f"{header[0]:{w0}s}" + "".join(f"{h:>{w}s}" for h in header[1:])]
+    lines += [f"{r[0]:{w0}s}" + "".join(f"{c:>{w}s}" for c in r[1:]) for r in rows]
+    return "```" + "\n".join(lines) + "```"
 
 
-def _models(a):
-    return {m["id"]: m for m in a["plan"].get("models", [])}
+def _group(a, prefix):
+    """Merged rows [(label, {subkey: value})] for metrics under one task prefix."""
+    rows = []
+    for lab, m in labels.merge_identical(a["summary"] or {}, a["labels"]):
+        sub = {k[len(prefix) + 1:]: v for k, v in m.items() if k.startswith(prefix + ".")}
+        if sub:
+            rows.append((lab, sub))
+    return rows
+
+
+def task_table(a, prefix, probe_pref=None, one_probe=False):
+    rows = _group(a, prefix)
+    if not rows:
+        return []
+    keys = set().union(*[set(m) for _, m in rows])
+    budgets = sorted({k.split(".")[1] for k in keys if k.startswith("budgets.")}, key=lambda b: 10**9 if b == "all" else int(b))
+    paras = []
+    if budgets:
+        probes = [("linear_macro_f1", "linear probe"), ("knn_macro_f1", "kNN")]
+        if probe_pref == "knn":
+            probes.reverse()
+        if one_probe:
+            probes = probes[:1]
+        for probe, pname in probes:
+            trs = [[lab] + [labels.cell(m.get(f"budgets.{b}.{probe}")) for b in budgets] for lab, m in rows
+                   if any(f"budgets.{b}.{probe}" in m for b in budgets)]
+            if trs:
+                paras.append(_table([f"macro-F1, {pname}"] + ["all" if b == "all" else f"{b}/class" for b in budgets], trs))
+        m0 = rows[0][1]
+        maj = [f"{'all' if b == 'all' else b + '/class'} {labels.sig3(m0[f'budgets.{b}.majority_macro_f1']['mean'])}"
+               for b in budgets if f"budgets.{b}.majority_macro_f1" in m0]
+        if maj:
+            paras.append("Majority class: " + ", ".join(maj) + ".")
+    else:
+        cols = [c for c in ("foscttm", "recall@1", "recall@10", "recall@50", "pearson_median", "ari", "nmi") if c in keys]
+        paras.append(_table(["model"] + cols, [[lab] + [labels.cell(m.get(c)) for c in cols] for lab, m in rows]))
+        ch = [f"{c.replace('chance_', '')} {labels.sig3(rows[0][1][c]['mean'])}" for c in sorted(keys) if c.startswith("chance_")]
+        if ch:
+            paras.append("Chance: " + ", ".join(ch) + ".")
+    return paras
 
 
 # ── Pages ──
 
 def summary_page(a, n):
     obj, rec = a["objective"], a["recommendation"] or {}
-    key, desc, t = _primary_metric(a)
-    lines = [f"Dataset: {a['dataset']}. Report {n}.", "", "Objective (verbatim):", obj.get("objective_text", ""), "",
-             f"Decision: {obj.get('decision')}. {obj.get('decision_reason', '')}",
-             f"Inference modalities (inputs for new samples): {', '.join(obj.get('inference_modalities', []))}. "
-             f"Training-only modalities: {', '.join(obj.get('training_only_modalities', [])) or 'none'}."]
+    answer = sections_of(a["findings"]).get("Answer", "")
     sc = obj.get("success_criterion") or {}
-    if sc:
-        lines.append(f"Success criterion: {sc.get('metric')} vs {sc.get('baseline')}: {sc.get('comparison')}.")
-    blocks = [(None, lines)]
-    if key:
-        rows = []
-        for name, r in (a["summary"] or {}).items():
-            if key in r["metrics"]:
-                kind = "baseline" if r["method"] in ("single_modality_features", "linear_supervised", "frozen_probe", "linear_alignment") else "learned"
-                rows.append(f"{name:28s} {kind:9s} {_ms(r['metrics'][key])}")
-        blocks.append((f"Primary result: {desc}", ["```" + "\n".join(rows) + "```",
-                                                     "Mean ± SD over seeds on held-out test samples; n = number of seeds. Baselines have no trainable weights (one run)."]))
+    blocks = [(None, ["Objective (verbatim): " + obj.get("objective_text", "")]),
+              ("Answer", _paras(answer) or ["(findings.md has no Answer section)"])]
+    blocks.append(("Success criterion", [f"{sc.get('metric')}" + (f", {sc['probe']} probe" if sc.get("probe") else "")
+                                         + f", against {sc.get('baseline')}: {sc.get('comparison')}. The full primary-task table opens the Results section."]))
     if rec:
-        blocks.append(("Recommendation", [f"Chosen representation: {rec.get('chosen_model')}. {rec.get('chosen_reason', '')}"] +
+        blocks.append(("Recommendation", [f"Chosen representation: {a['labels'].get(rec.get('chosen_model'), rec.get('chosen_model'))}."] +
                        [f"- {u['verdict'].replace('_', ' ')}: {u['use']}" for u in rec.get("uses", [])]))
     return text_pages("Summary", blocks)
 
 
-def guide_pages(a):
+def setup_pages(a):
+    obj, p, plan = a["objective"], a["profile"], a["plan"]
+    tasks = [f"- {t['task'].replace('_', ' ')}{' (primary)' if t.get('primary') else ''}: " +
+             ", ".join(f"{k} {v}" for k, v in t.items() if k not in ("task", "primary")) for t in obj.get("tasks", [])]
+    tasks += [f"- secondary: {t['task'].replace('_', ' ')} of {t.get('label')}" for t in obj.get("secondary_tasks", [])]
+    data = [f"{p.get('samples', {}).get('n')} paired samples; modalities: " + ", ".join(
+        f"{m} ({d['kind']})" for m, d in p.get("modalities", {}).items()) + ". Inference (test-time) modalities: "
+        + ", ".join(obj.get("inference_modalities", [])) + "; training-only: " + (", ".join(obj.get("training_only_modalities", [])) or "none") + "."]
     sp = (a["split"] or {}).get("sizes", {})
-    lines = [f"Split: {sp.get('train')} training, {sp.get('val')} validation, {sp.get('test')} held-out test samples. "
-             "Featurizers and models are fit on training (+ validation for featurizers); validation picks epochs and CCA size; "
-             "every reported result is on held-out test samples, which never touch fitting or model selection.",
-             "Seeds: each learned model is trained with several seeds; tables show mean ± SD over seeds. "
-             "Label budgets: probes are fit on seeded, class-stratified draws of k labeled training samples per class "
-             "(several draws for small k); the draw SD is in the per-run metrics files.",
-             "Baselines: no-pretraining features (e.g. PCA, LSI, TF-IDF, pixel PCA), frozen pretrained encoders, "
-             "CCA (linear alignment), and PLS / logistic regression (linear supervised), as the plan lists."]
-    return text_pages("How to read this report", [("Method of evaluation", lines),
-                                                   ("Abbreviations and terms", [f"- {k}: {v}" for k, v in GLOSSARY])])
-
-
-def objective_page(a):
-    obj = a["objective"]
-    tl = []
-    for t in obj.get("tasks", []):
-        extra = ", ".join(f"{k}: {v}" for k, v in t.items() if k not in ("task", "primary"))
-        tl.append(f"- {t['task']}{' (primary)' if t.get('primary') else ''}: {extra}")
-    for t in obj.get("secondary_tasks", []):
-        tl.append(f"- secondary {t['task']}: label {t.get('label')}, modality {t.get('modality', 'inference')}")
-    sc = obj.get("success_criterion") or {}
-    blocks = [("Tasks", tl), ("Success criterion", [f"Metric: {sc.get('metric')}", f"Baseline: {sc.get('baseline')}",
-                                                    f"Comparison: {sc.get('comparison')}", f"Reason: {sc.get('reason')}"])]
-    if obj.get("interpretation_notes"):
-        blocks.append(("Interpretation notes", [obj["interpretation_notes"]]))
-    return text_pages("Objective interpretation", blocks)
-
-
-def data_page(a):
-    p, plan = a["profile"], a["plan"]
-    lines = [f"{p.get('samples', {}).get('n')} samples; paired modalities: {', '.join(p.get('samples', {}).get('paired_modalities', []))}."]
-    for m, d in p.get("modalities", {}).items():
-        if d["kind"] == "counts":
-            lines.append(f"- {m} (counts): {d['n_features']} features, sparsity {d['sparsity']}, integer-valued {d['integer_valued']}")
-        elif d["kind"] == "text":
-            lines.append(f"- {m} (text): median {d['words_per_text']['p50']} words per text, vocabulary {d['vocabulary_size']}")
-        else:
-            lines.append(f"- {m} (image): median size {d['width']['p50']} x {d['height']['p50']} px")
+    data.append(f"Split ({plan.get('split', {}).get('source')}): {sp.get('train')} training, {sp.get('val')} validation, {sp.get('test')} test. "
+                "Validation picks epochs and the CCA size and feeds the evidence check; every reported result is on the test samples.")
     for lname, l in p.get("labels", {}).items():
-        lines.append(f"- label {lname}: {l['n_classes']} classes, {l['n_labeled']} labeled, {l['n_missing']} missing; counts {l['class_counts']}")
-    sp, pool = plan.get("split", {}), plan.get("training_pool", {})
-    dec = [f"Split: {json.dumps({k: v for k, v in sp.items() if k != 'reason'})}. Reason: {sp.get('reason')}",
-           f"Training pool for representation learning: {pool.get('filter')}{' (' + pool['label'] + ')' if pool.get('label') else ''}. Reason: {pool.get('reason')}"]
+        data.append(f"Label {lname}: {l['n_classes']} classes, {l['n_labeled']} labeled. Excluded: "
+                    + (", ".join((plan.get("excluded_classes") or {}).get(lname, {}).get("classes", [])) or "none") + ".")
+    return text_pages("Setup", [("Tasks", tasks), ("Data and split", data),
+                                ("Abbreviations", [f"- {k}: {v}" for k, v in GLOSSARY])])
+
+
+def _first_sentence(text):
+    """First sentence; extended to the second when the first is a short lead-in ("Judgment call.")."""
+    text = (text or "").strip()
+    ends = [m.start() for m in re.finditer(r"(?<=[.!?])\s", text)]
+    if not ends:
+        return text
+    cut = ends[0] if ends[0] >= 40 or len(ends) == 1 else ends[1]
+    return text[:cut]
+
+
+KEY_WORDS = {"mean_fraction_of_knn_that_are_near_duplicates": "near-duplicate neighbors", "samples_with_a_near_duplicate": "samples with a near-duplicate",
+             "random_pairs_at_or_above_cutoff": "random pairs above cutoff", "best_foscttm": "CCA FOSCTTM", "foscttm": "FOSCTTM",
+             "linear_macro_f1": "linear macro-F1", "knn_macro_f1": "kNN macro-F1", "effective_rank": "effective rank"}
+
+
+def _ev_short(items, k=2):
+    out = []
+    for i in (items or [])[:k]:
+        parts = [x for x in str(i.get("key", "")).split(".") if x not in ("mean", "metrics")]
+        word = KEY_WORDS.get(parts[-1], parts[-1].replace("_", " ")) if parts else ""
+        v = i.get("value")
+        out.append(f"{word} {labels.sig3(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else v}")
+    return "; ".join(out) or "-"
+
+
+def decisions(a):
+    """Rows (decision, choice, evidence, alternative rejected) and the distinct reasons, once each."""
+    plan, b = a["plan"], a["baseline_check"] or {}
+    rows, reasons = [], {}
+
+    def add_reason(text, who):
+        if text:
+            reasons.setdefault(_first_sentence(text), []).append(who)
+
+    sp = plan.get("split", {})
+    sz = (a["split"] or {}).get("sizes", {})
+    rows.append(("split", sp.get("source", ""), f"{sz.get('train')}/{sz.get('val')}/{sz.get('test')} train/val/test", "random" if sp.get("source") == "declared" else "declared / grouped"))
+    add_reason(sp.get("reason"), "split")
+    pool = plan.get("training_pool", {})
+    rows.append(("training pool", pool.get("filter", "") + (f" ({pool['label']})" if pool.get("label") else ""), "-",
+                 "label_present" if pool.get("filter") == "all" else "all"))
+    add_reason(pool.get("reason"), "training pool")
     for lab, ex in (plan.get("excluded_classes") or {}).items():
-        dec.append(f"Excluded classes of {lab}: {ex.get('classes')}. Reason: {ex.get('reason')}")
-    for lab, bn in (plan.get("budget_not_filled") or {}).items():
-        dec.append(f"Budget not filled for {lab}: {bn.get('classes')}. Reason: {bn.get('reason')}")
-    return text_pages("Data and split", [("Data", lines), ("Decisions", dec)])
-
-
-def evidence_pages(a):
-    b = a["baseline_check"] or {}
-    if not b:
-        return []
-    blocks = [(None, [b.get("note", "")])]
-    for m, encs in b.get("encoders", {}).items():
-        rows = []
-        for enc, e in encs.items():
-            lab = "; ".join(f"{label}: " + ", ".join(f"b{bud} lin {r['linear_macro_f1']['mean']:.3f} / kNN {r['knn_macro_f1']['mean']:.3f}"
-                                                      for bud, r in budgets.items()) for label, budgets in e.get("labels", {}).items())
-            rows.append(f"- {enc} (dim {e['dim']}, effective rank {e['effective_rank']}{', no pretraining' if e['no_pretraining'] else ''}){': ' + lab if lab else ''}")
-        blocks.append((f"Candidate encoders for {m} (validation macro-F1)", rows))
-    for pair, combos in b.get("cross_modal", {}).items():
-        blocks.append((f"Linear (CCA) matching {pair} on validation", [f"- {c}: best FOSCTTM {v.get('best_foscttm')} with {v.get('best_components')} components"
-                                                                         for c, v in combos.items()]))
-    for enc, d in b.get("zero_shot", {}).items():
-        blocks.append((f"Zero-shot matching, {enc}", [f"- {k}: FOSCTTM {v['foscttm']}, recall@10 {v['recall@10']}" for k, v in d.items()]))
-    red = b.get("redundancy", {})
-    if red:
-        blocks.append(("Redundancy (near-duplicates among the 10 nearest neighbors)", [
-            f"- {k}: {v['mean_fraction_of_knn_that_are_near_duplicates']} of neighbors are near-duplicates (random pairs: {v.get('random_pairs_at_or_above_cutoff')})"
-            for k, v in red.items()]))
-    return text_pages("Evidence before choosing (baseline check)", blocks)
-
-
-def _ev(items):
-    return "; ".join(f"{i.get('file')}:{i.get('key')} = {i.get('value')}" for i in items or [])
-
-
-def methods_pages(a):
-    blocks = []
-    for m in a["plan"].get("models", []):
-        lines = [f"Method: {m['method']}. Status: {m.get('status', 'planned')}. Seeds: {m.get('seeds', [0])}.", f"Why: {m.get('reason', '')}"]
+        ev = ", ".join(f"{i.get('value')}" for i in ex.get("evidence", []))
+        rows.append((f"exclude {lab} classes", ", ".join(ex.get("classes", [])), f"counts {ev}", "keep them"))
+        add_reason(ex.get("reason"), f"exclusion ({lab})")
+    seen = set()
+    for m in plan.get("models", []):
         for mod, s in m.get("inputs", {}).items():
-            lines.append(f"- {mod}: encoder {s.get('encoder')}" + (f", head {s['head']}" if s.get("head") else "") + f". Reason: {s.get('reason', '')}")
-            if s.get("evidence"):
-                lines.append(f"  Evidence: {_ev(s['evidence'])}")
+            key = (mod, s["encoder"])
+            if key in seen or not plan_schema.METHODS.get(m["method"], {}).get("trains"):
+                continue
+            seen.add(key)
+            cands = [c for c in b.get("encoders", {}).get(mod, {}) if c != s["encoder"]]
+            ev = _ev_short(s.get("evidence"))
+            rows.append((f"{mod} encoder", labels.enc_name(s["encoder"]), ev, ", ".join(labels.enc_name(c) for c in cands) or "-"))
+            add_reason(s.get("reason"), f"{mod} encoder {labels.enc_name(s['encoder'])}")
+    losses = {}
+    for m in plan.get("models", []):
         if m.get("loss"):
-            lines.append(f"- training loss: {m['loss']}. Reason: {m.get('loss_reason', '')}")
-            if m.get("loss_evidence"):
-                lines.append(f"  Evidence: {_ev(m['loss_evidence'])}")
-        if m.get("hyperparameters"):
-            lines.append("- hyperparameters: " + ", ".join(f"{k} = {v}" for k, v in m["hyperparameters"].items())
-                         + " (reasons in the appendix)")
-        blocks.append((f"{m['id']}", lines))
-    rev = a["plan"].get("critique_applied")
-    if rev:
-        blocks.append(("Revision after the critique", [f"Plan revision {a['plan'].get('revision')}: {rev}"]))
-    return text_pages("Methods: encoders, losses, and why", blocks)
+            losses.setdefault(m["loss"], []).append(m)
+    for loss, ms in losses.items():
+        others = sorted(plan_schema.LOSSES.get(ms[0]["method"], set()) - set(losses))
+        ev = _ev_short(ms[0].get("loss_evidence"))
+        rows.append((f"loss ({len(ms)} model{'s' if len(ms) > 1 else ''})", labels.LOSS_NAMES.get(loss, loss), ev, ", ".join(labels.LOSS_NAMES.get(o, o) for o in others) or "-"))
+        for x in ms:
+            add_reason(x.get("loss_reason"), f"loss {labels.LOSS_NAMES.get(loss, loss)}")
+    rec = a["recommendation"] or {}
+    if rec:
+        rows.append(("exported representation", rec.get("chosen_model", ""), "see Results", "the other models"))
+        add_reason(rec.get("chosen_reason"), "exported representation")
+    return rows, reasons
 
 
-def _cell(v):
-    if v is None:
-        return "-"
-    sd = f"±{v['sd']:.3f}".replace("0.", ".") if v.get("n", 1) > 1 else ""
-    return f"{v['mean']:.3f}{sd}"
-
-
-def _table(header, rows, w0=30, w=13):
-    lines = [f"{header[0]:{w0}s}" + "".join(f"{h:>{w}s}" for h in header[1:])]
-    lines += [f"{r[0][:w0 - 1]:{w0}s}" + "".join(f"{c:>{w}s}" for c in r[1:]) for r in rows]
-    return "```" + "\n".join(lines) + "```"
-
-
-def hyperparameter_pages(a):
-    blocks = []
-    for m in a["plan"].get("models", []):
-        hp = m.get("hyperparameters") or {}
-        if hp:
-            blocks.append((m["id"], [f"- {k} = {v}: {(m.get('hyperparameter_reasons') or {}).get(k, '')}" for k, v in hp.items()]))
-    return text_pages("Appendix: hyperparameters and their reasons", blocks) if blocks else []
+def decisions_pages(a):
+    rows, reasons = decisions(a)
+    lines = ["```" + "\n".join(f"{r[0][:24]:24s} {r[1][:16]:16s} {r[2][:44]:44s} {r[3][:26]}" for r in
+                               [("decision", "choice", "evidence", "alternative rejected")] + rows) + "```"]
+    rs = [f"- {', '.join(dict.fromkeys(who))}: {text}" for text, who in reasons.items()]
+    names = ["; ".join(f"{mid} = {lab}" for mid, lab in a["labels"].items()) + "."]
+    return text_pages("Decisions", [(None, lines), ("Reasons (each stated once)", rs), ("Model ids used in the files", names)])
 
 
 def results_pages(a):
-    """One compact table per task: models as rows; label budgets (or metrics) as columns."""
-    summ = a["summary"] or {}
-    groups = {}
-    for name, r in summ.items():
-        for k, v in r["metrics"].items():
-            parts = k.split(".")
-            if len(parts) >= 3:
-                groups.setdefault(".".join(parts[:2]), {}).setdefault(name, {})[".".join(parts[2:])] = v
-    note = ("Cells: mean ± SD over seeds (no SD: a single run, e.g. a baseline). Held-out test samples. "
-            "Label-draw spread for each run is in its metrics file.")
+    obj = a["objective"]
+    pk, t = _primary(a)
+    order = [pk] + [p for p in (
+        [f"cross_modal_retrieval.{x['query']}->{x['gallery']}" for x in obj.get("tasks", []) if x["task"] == "cross_modal_retrieval"] +
+        [f"label_transfer.{x['from']}->{x['to']}" for x in obj.get("tasks", []) if x["task"] == "label_transfer"] +
+        [f"label_prediction.{x['label']}" for x in obj.get("tasks", []) if x["task"] == "label_prediction"] +
+        [f"cross_modal_prediction.{x['target']}" for x in obj.get("tasks", []) if x["task"] == "cross_modal_prediction"] +
+        [f"clustering.{x['label']}" for x in obj.get("tasks", []) if x["task"] == "label_prediction"]) if p != pk]
+    sec = [f"secondary_label_prediction.{x['label']}" for x in obj.get("secondary_tasks", [])]
     blocks = []
-    for g, rows in groups.items():
-        title = g.replace("_", " ").replace(".", ": ")
-        keys = set().union(*[set(m) for m in rows.values()])
-        budgets = sorted({k.split(".")[1] for k in keys if k.startswith("budgets.")},
-                         key=lambda b: 10**9 if b == "all" else int(b))
-        if budgets:
-            paras = []
-            for probe, pname in (("linear_macro_f1", "Linear probe macro-F1"), ("knn_macro_f1", "kNN macro-F1")):
-                trs = [[n] + [_cell(m.get(f"budgets.{b}.{probe}")) for b in budgets] for n, m in rows.items()
-                       if any(f"budgets.{b}.{probe}" in m for b in budgets)]
-                if trs:
-                    hdr = [pname] + ["all" if b == "all" else f"{b}/class" for b in budgets]
-                    paras.append(_table(hdr, trs))
-            any_m = next(iter(rows.values()))
-            maj = [f"{'all' if b == 'all' else b + '/class'} {any_m[f'budgets.{b}.majority_macro_f1']['mean']:.3f}"
-                   for b in budgets if f"budgets.{b}.majority_macro_f1" in any_m]
-            if maj:
-                paras.append("Majority-class macro-F1: " + ", ".join(maj) + ".")
-            blocks.append((title, paras + [note]))
-        else:
-            cols = [c for c in ("foscttm", "recall@1", "recall@10", "recall@50", "median_rank", "pearson_median", "pearson_p25",
-                                "pearson_p75", "ari", "nmi") if c in keys]
-            trs = [[n] + [_cell(m.get(c)) for c in cols] for n, m in rows.items()]
-            chance = [f"{c.replace('chance_', '')} {next(iter(rows.values()))[c]['mean']}" for c in sorted(keys) if c.startswith("chance_")]
-            paras = [_table([title.split(": ")[0]] + cols, trs)]
-            if chance:
-                paras.append("Chance: " + ", ".join(chance) + ".")
-            blocks.append((title, paras + [note]))
-    return text_pages("Results (held-out test samples)", blocks)
-
-
-def training_pages(a):
-    lines = []
-    for k, r in a["runs"].items():
-        if "history" not in r:
-            continue
-        t = f", final temperature {r['final_temperature']:.3f}" if r.get("final_temperature") else ""
-        lu = r.get("label_use")
-        lab = f", {lu['labels_used']} labels used ({lu['label']}, budget {lu['budget']})" if lu else ""
-        lines.append(f"- {k}: {r['epochs_run']} epochs, {r['stop_reason']}, {r['n_train']} training pairs, {r['seconds']} s{t}{lab}")
+    for i, prefix in enumerate(order + sec):
+        paras = task_table(a, prefix, (obj.get("success_criterion") or {}).get("probe"), one_probe=prefix in sec)
+        if prefix in sec and paras:
+            paras.append("Secondary label: only the probe named in the success criterion is shown; both are in evaluation.csv.")
+        if paras:
+            title = ("Primary: " if i == 0 else ("Secondary: " if prefix in sec else "")) + prefix.replace("_", " ").replace(".", ", ")
+            blocks.append((title, paras))
     col = []
     for mid, v in (a["collapse"] or {}).items():
         for mod, x in v["inputs"].items():
             ranks = [r[mod]["effective_rank"] for r in v["learned"].values() if mod in r]
-            low = [r[mod]["low_variance_dim_fraction"] for r in v["learned"].values() if mod in r]
-            col.append(f"- {mid} / {mod}: input effective rank {x['effective_rank']} (dim {x['dim']}); learned {min(ranks) if ranks else '-'}-{max(ranks) if ranks else '-'}"
-                       f" (dim {next(iter(v['learned'].values()))[mod]['dim'] if v['learned'] else '-'}); near-constant dimensions {max(low) if low else '-'}")
-    fails = [f"- {r['key']}: {r.get('error')}" for r in (a["run_log"] or {}).get("runs", []) if r.get("status") == "failed"]
-    blocks = [("Training runs", lines or ["(no trained models)"]), ("Collapse check", col or ["(no trained models)"])]
-    if fails:
-        blocks.append(("Failed runs", fails))
-    return text_pages("Training and collapse", blocks)
+            if ranks:
+                col.append([f"{a['labels'].get(mid, mid)} / {mod}", labels.sig3(x["effective_rank"]), f"{labels.sig3(min(ranks))}-{labels.sig3(max(ranks))}"])
+    if col:
+        blocks.append(("Collapse check", [_table(["embedding", "input rank", "learned rank"], col, w=14)]))
+    blocks.append((None, ["Cells: mean ± SD over seeds (no SD: one run); 3 significant figures. Full precision and label-draw SD: evaluation.csv and metrics/*.json."]))
+    return text_pages("Results (held-out test samples)", blocks)
 
 
-CAPTIONS = {
-    "label_budget": "Macro-F1 on held-out test samples vs labeled training examples per class, linear probe (left) and kNN (right). Points: mean over seeds; bars: SD over seeds. Dashed: majority class.",
-    "secondary_budget": "Secondary label, same layout: frozen and learned representations, held-out test samples.",
-    "matching": "Held-out matching between modalities. Left: FOSCTTM (0 perfect, 0.5 chance). Right: recall@k with chance (dashed). Bars: SD over seeds.",
-    "transfer": "Labels transferred across modalities: classifier fit on one modality's training embeddings, applied to the other modality's test embeddings.",
-    "training_curves": "Loss per epoch for seed 0 of each trained model, rescaled to [0, 1] per model; the legend gives the stopping reason.",
-    "collapse": "Effective rank of input features vs the learned embedding (test samples). A large drop is compression; near zero would be collapse.",
-    "embedding_2d": "t-SNE of held-out test embeddings colored by label: no-pretraining baseline vs the best trained model on the primary metric.",
-}
+def _takeaway(a, stem):
+    summ = a["summary"] or {}
+    L = a["labels"]
+    best = lambda key, low=False: (sorted(((r["metrics"][key]["mean"], labels.row_label(n, r, L)) for n, r in summ.items() if key in r["metrics"]),
+                                          reverse=not low) or [(None, None)])[0]
+    if stem.startswith("matching_"):
+        pair = stem[len("matching_"):].replace("-", "->", 1)
+        v, who = best(f"cross_modal_retrieval.{pair}.foscttm", low=True)
+        return f"Lowest FOSCTTM: {who} ({labels.sig3(v)}); chance is 0.5." if who else ""
+    if stem.startswith("transfer_"):
+        pair = stem[len("transfer_"):].replace("-", "->", 1)
+        v, who = best(f"label_transfer.{pair}.budgets.all.knn_macro_f1")
+        return f"Highest kNN transfer macro-F1: {who} ({labels.sig3(v)})." if who else ""
+    if stem.startswith(("label_budget_", "secondary_budget_")):
+        lab = stem.split("_budget_", 1)[1]
+        pre = ("label_prediction." if stem.startswith("label") else "secondary_label_prediction.") + lab
+        ks = sorted({k.split(".")[3] for r in summ.values() for k in r["metrics"] if k.startswith(pre + ".budgets.")},
+                    key=lambda b: 10**9 if b == "all" else int(b))
+        if not ks:
+            return ""
+        v, who = best(f"{pre}.budgets.{ks[0]}.linear_macro_f1")
+        return f"With the fewest labels ({ks[0]}{'/class' if ks[0] != 'all' else ''}), the best linear probe is {who} ({labels.sig3(v)})."
+    if stem == "training_curves":
+        stops = sorted({r.get("stop_reason", "").split(" (")[0] for r in a["runs"].values() if "stop_reason" in r})
+        return "Stopping reasons seen: " + ", ".join(stops) + "."
+    if stem == "collapse":
+        return "A learned rank far below the input's means the alignment compressed the features."
+    if stem == "embedding_2d":
+        return "Classes that form separate clusters are easy to label with few examples."
+    return ""
+
+
+FIG_TEXT = {"label_budget": "Macro-F1 vs labeled examples per class (linear probe left, kNN right); bars: SD over seeds.",
+            "secondary_budget": "Secondary label, same layout.",
+            "matching": "Held-out matching: FOSCTTM (left) and recall@k with chance dashed (right).",
+            "transfer": "Labels transferred across modalities (solid: kNN, light: linear).",
+            "training_curves": "Loss per epoch, seed 0 of each trained model, rescaled per model.",
+            "collapse": "Effective rank, input features vs learned embedding.",
+            "embedding_2d": "t-SNE of test embeddings colored by label: no-pretraining baseline vs best trained model."}
 
 
 def figure_pages(a):
+    pngs = sorted((a["out"] / "figures").glob("*.png"), key=lambda p: (not p.stem.startswith(("matching", "label_budget")), p.stem))
     figs = []
-    for png in sorted((a["out"] / "figures").glob("*.png")):
-        cap = next((v for k, v in CAPTIONS.items() if png.stem.startswith(k)), png.stem)
-        figs.append(figure_page(png, cap))
+    for i in range(0, len(pngs), 2):
+        fig = plt.figure(figsize=PAGE_SIZE)
+        for j, png in enumerate(pngs[i:i + 2]):
+            img = plt.imread(png)
+            top = 0.97 - j * 0.48
+            ax = fig.add_axes([0.06, top - 0.38, 0.88, 0.37]); ax.axis("off")
+            ax.imshow(img, interpolation="none")
+            txt = next((v for k, v in FIG_TEXT.items() if png.stem.startswith(k)), png.stem) + " " + _takeaway(a, png.stem)
+            fig.text(0.07, top - 0.395, "\n".join(_wrap(txt, "c", max_w=0.86 * 612)), fontsize=8, color=MUTED, va="top")
+        figs.append(fig)
     return figs
 
 
 def findings_pages(a):
-    text = a["findings"] or "(findings.md was not written)"
-    blocks, head, paras = [], None, []
-    for line in text.splitlines():
-        if line.startswith("#"):
-            if head or paras:
-                blocks.append((head, paras))
-            head, paras = line.lstrip("# ").strip(), []
-        elif line.strip():
-            paras.append(line.strip())
-    blocks.append((head, paras))
-    return text_pages("Findings", blocks)
+    secs = sections_of(a["findings"])
+    blocks = [(h, _paras(t)) for h, t in secs.items() if h not in ("Answer", "Limitations", "Critique and revision")]
+    return text_pages("Findings", blocks) if blocks else []
 
 
-def recommendation_pages(a):
+def recommendation_pages(a, n=None):
     rec = a["recommendation"]
     if not rec:
         return []
-    lines = [f"Chosen representation: {rec.get('chosen_model')}. {rec.get('chosen_reason', '')}", f"Evidence: {_ev(rec.get('chosen_evidence'))}"]
-    blocks = [(None, lines)]
+    lines = []
     for u in rec.get("uses", []):
-        blocks.append((f"{u['verdict'].replace('_', ' ').capitalize()}: {u['use']}", [u.get("reason", ""), f"Evidence: {_ev(u.get('evidence'))}"]))
+        r = _first_sentence(u.get("reason", ""))
+        r = re.split(r"[,;(]?\s*[^,;(]*\d+\.\d+", r)[0].strip(" ,;(") if re.search(r"\d+\.\d+", r) else r
+        lines.append(f"- {u['verdict'].replace('_', ' ').capitalize()}: {u['use']}." + (f" {r}" if r else ""))
     c = a["contract"] or {}
-    if c:
-        blocks.append(("Files for downstream tools", [f"- embeddings: {c.get('embeddings')} (rows: {c.get('embedding_index')})", f"- summary: outputs/{a['dataset']}/summary.json"]))
-    return text_pages("Downstream use", blocks)
+    files = [f"Embeddings and index: deliverables/generated_report_{n}/representations/ (also {c.get('embeddings')}, {c.get('embedding_index')})."] if c else []
+    return text_pages("Downstream use", [(None, lines + files)])
+
+
+def _strip_decimals(text):
+    t = _first_sentence(text)
+    return re.split(r"\s*[(\[]?[^.;:()]*\d+\.\d+", t)[0].rstrip(" ,;:(") + ("" if not re.search(r"\d+\.\d+", t) else " ...")
 
 
 def critique_pages(a):
-    c = a["critique"]
+    c, resp = a["critique"], a["critique_response"]
     if not c:
-        return text_pages("Critique and revision", [(None, ["No critique.json was written; the critic did not run or wrote nothing."])])
-    blocks = [(None, [c.get("summary", "")])]
-    for f in c.get("findings", []):
-        blocks.append((f"{f.get('check', '')}: {f.get('severity', '')}", [f.get("finding", ""), f"Suggested fix: {f.get('suggested_fix', '-')}"]))
-    return text_pages("Critique and revision", blocks)
+        return text_pages("Critique", [(None, ["No critique.json was written; the critic did not run or wrote nothing."])])
+    rows = []
+    if resp:
+        for r in resp:
+            rows.append(f"- [{r.get('severity')}] {r.get('finding_title')}: changed: {r.get('change')}. Effect on the final result: {r.get('effect_on_final')}")
+    else:
+        for f in c.get("findings", []):
+            title = f.get("title") or _strip_decimals(f.get("finding", ""))
+            rows.append(f"- [{f.get('severity')}] {title} What changed / effect on the final result: not recorded in this run "
+                        f"(critique_response.json missing); see Findings and Limitations.")
+    return text_pages("Critique", [(None, rows + [f"Full critique: outputs/{a['dataset']}/critique.json (numbers there are from the revision it reviewed)."])])
 
 
-def limitations_pages(a, untraced):
-    auto = []
+def limitation_items(a, untraced):
+    items = []
     for enc, c in (a["profile"].get("cache") or {}).items():
-        used = any(s.get("encoder") == f"cache:{enc}" for m in a["plan"].get("models", []) for s in m.get("inputs", {}).values())
-        if used:
-            auto.append(f"- Frozen encoder {enc} was pretrained on: {c.get('pretraining_data')} Check the data description for overlap with this dataset.")
-    caveats = re.search(r"^##\s+Known caveats\s*$(.*?)(?=^##\s|\Z)", a["desc"] or "", flags=re.M | re.S)
-    if caveats:
-        auto.append("Known caveats of the dataset (from its data description):")
-        auto += [ln for ln in caveats.group(1).strip().splitlines() if ln.strip()]
+        if any(s.get("encoder") == f"cache:{enc}" for m in a["plan"].get("models", []) for s in m.get("inputs", {}).values()):
+            items.append(f"Pretraining data of {labels.enc_name('cache:' + enc)}: {c.get('pretraining_data')}")
+    cav = re.search(r"^##\s+Known caveats\s*$(.*?)(?=^##\s|\Z)", a["desc"] or "", flags=re.M | re.S)
+    if cav:
+        items += [" ".join(x.split()) for x in re.split(r"\n- ", "\n" + cav.group(1).strip()) if x.strip()]
     for r in (a["run_log"] or {}).get("runs", []):
         if r.get("status") in ("not_run_budget", "not_run_unavailable", "failed"):
-            auto.append(f"- {r.get('model_id') or r.get('key')}: {r['status']} ({r.get('reason') or r.get('error', '')})")
+            items.append(f"{r.get('model_id') or r.get('key')}: {r['status']} ({r.get('reason') or r.get('error', '')})")
     for k, r in a["runs"].items():
-        if r.get("stop_reason", "").startswith(("max_epochs", "time_cap")) and r.get("early_stopping"):
-            auto.append(f"- {k} stopped at {r['stop_reason']}; validation loss may still have been improving.")
+        if r.get("early_stopping") and str(r.get("stop_reason", "")).startswith(("max_epochs", "time_cap")):
+            items.append(f"{k} stopped at {r['stop_reason']}; validation loss may still have been improving.")
+    own = sections_of(a["findings"]).get("Limitations", "")
+    items += [x.lstrip("- ").strip() for x in _paras(own)]
     if untraced:
-        auto.append(f"- findings.md contains numbers not found in any artifact: {', '.join(untraced)}")
-    own = re.search(r"^##\s+Limitations\s*$(.*?)(?=^##\s|\Z)", a["findings"] or "", flags=re.M | re.S)
-    blocks = [("Collected automatically", auto or ["(none)"])]
-    if own:
-        blocks.append(("Stated in the findings", [ln.strip() for ln in own.group(1).strip().splitlines() if ln.strip()]))
-    return text_pages("Limitations", blocks)
+        items.append("findings contain numbers not found in any artifact: " + ", ".join(untraced))
+    seen, out = set(), []
+    for x in items:
+        key = re.sub(r"\W+", " ", x.lower())[:80]
+        if x and key not in seen:
+            seen.add(key)
+            out.append("- " + x.lstrip("- "))
+    return out
 
 
 def repro_pages(a, n):
-    try:
-        import numpy, sklearn, torch
-        versions = f"python {platform.python_version()}, torch {torch.__version__}, numpy {numpy.__version__}, scikit-learn {sklearn.__version__}"
-    except Exception:
-        versions = f"python {platform.python_version()}"
     rl = a["run_log"] or {}
-    lines = [f"Command: ./run.sh {a['dataset']} \"<objective above>\" --report-number {n}",
-             f"Plan revision {a['plan'].get('revision')}; budget {a['plan'].get('budget_min')} min; model runs took {rl.get('minutes')} min.",
-             f"Split key {(a['split'] or {}).get('key')}; {versions}."]
-    lines += [f"- {k}: config hash {r.get('config_hash', '-')}, {r.get('seconds', '-')} s on {r.get('device', 'cpu')}" for k, r in a["runs"].items()]
-    lines.append(f"Generated {time.strftime('%Y-%m-%d %H:%M')}. All intermediate files: outputs/{a['dataset']}/.")
-    return text_pages("Reproducibility", [(None, lines)])
+    lines = [f"Command: ./run.sh {a['dataset']} \"<objective above>\" --report-number {n}. Plan revision {a['plan'].get('revision')}; "
+             f"model runs took {rl.get('minutes')} min. Per-seed training logs, config hashes, hyperparameters with reasons, "
+             f"evidence values and versions: deliverables/generated_report_{n}/methods_summary.md, traceability.md, and "
+             f"outputs/{a['dataset']}/ (runs/, run_log.json, plan.json)."]
+    return lines
 
 
 def contents_page(sections, n, dataset):
@@ -611,26 +628,31 @@ def contents_page(sections, n, dataset):
     return [fig]
 
 
+def check_page_cap(n_pages, cap=MAX_PAGES):
+    if n_pages > cap:
+        raise SystemExit(f"ERROR: report would have {n_pages} pages, above the cap of {cap}. Shorten findings.md "
+                         "(each fact once; tables and figures carry the numbers) and rebuild.")
+
+
 def build(dataset, n, allow_untraced=False):
     a = load_all(dataset)
     if not a["plan"] or not a["objective"]:
         sys.exit("ERROR: plan.json and objective.json are required")
-    untraced = untraced_numbers(a["findings"] or "", a)
+    text = (a["findings"] or "") + "\n" + json.dumps(a["critique_response"] or [])
+    untraced = untraced_numbers(text, a)
     if untraced and not allow_untraced:
-        print("UNTRACED numbers in findings.md (not found in any artifact at the precision written):")
+        print("UNTRACED numbers in findings.md / critique_response.json (not found in any artifact at the precision written):")
         for u in untraced:
             print(f"  {u}")
-        sys.exit("ERROR: fix findings.md so every number comes from the JSON artifacts, then rerun.")
-    sections = [("Summary", summary_page(a, n)), ("How to read this report", guide_pages(a)),
-                ("Objective interpretation", objective_page(a)), ("Data and split", data_page(a)),
-                ("Evidence before choosing", evidence_pages(a)), ("Methods: encoders, losses, and why", methods_pages(a)),
-                ("Results", results_pages(a)), ("Training and collapse", training_pages(a)), ("Figures", figure_pages(a)),
-                ("Findings", findings_pages(a)), ("Downstream use", recommendation_pages(a)),
-                ("Critique and revision", critique_pages(a)), ("Limitations", limitations_pages(a, untraced)),
-                ("Reproducibility", repro_pages(a, n)), ("Appendix: hyperparameters", hyperparameter_pages(a))]
+        sys.exit("ERROR: fix them so every number comes from the JSON artifacts, then rerun.")
+    sections = [("Summary", summary_page(a, n)), ("Setup", setup_pages(a)), ("Decisions", decisions_pages(a)),
+                ("Results", results_pages(a)), ("Figures", figure_pages(a)), ("Findings", findings_pages(a)),
+                ("Downstream use", recommendation_pages(a, n)), ("Critique", critique_pages(a)),
+                ("Limitations and reproducibility", limitations_and_repro(a, untraced, n))]
     pages = contents_page(sections, n, dataset)
     for _, figs in sections:
         pages += figs
+    check_page_cap(len(pages))
     for i, fig in enumerate(pages, 1):
         fig.text(0.5, 0.008, f"{i} / {len(pages)}", ha="center", va="bottom", fontsize=7.5, color=MUTED)
     pdf_path = ROOT / "reports" / dataset / f"generated_report_{n}.pdf"
@@ -649,12 +671,17 @@ def build(dataset, n, allow_untraced=False):
         c["report"] = f"reports/{dataset}/generated_report_{n}.pdf"
         (a["out"] / "summary.json").write_text(json.dumps(c, indent=1) + "\n")
     print(f"Wrote {pdf_path} ({len(pages)} pages); page images in {png_dir}")
+    return len(pages)
+
+
+def limitations_and_repro(a, untraced, n):
+    return text_pages("Limitations and reproducibility", [(None, limitation_items(a, untraced)), ("Reproducibility", repro_pages(a, n))])
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build the generated report PDF for one dataset.")
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--report-number", type=int, required=True)
-    parser.add_argument("--allow-untraced", action="store_true", help="build even if findings.md has untraceable numbers (listed under Limitations)")
+    parser.add_argument("--allow-untraced", action="store_true", help="build even if findings have untraceable numbers (listed under Limitations)")
     args = parser.parse_args()
     build(args.dataset, args.report_number, args.allow_untraced)

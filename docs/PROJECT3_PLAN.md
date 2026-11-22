@@ -239,6 +239,12 @@ Time is your supervision time; I write the code during those sessions.
   - shorten the reports (32-40 pages);
   - rerun both from clean outputs so they use these fixes.
 
+**Report rework (Nov 22, before the clean rerun).**
+- **Length:** reports are capped at 15 pages. `report.py` refuses to build above that, with a test. The rebuilt saved outputs give 13 (PBMC) and 15 (ROCOv2) pages.
+- **Each fact once:** one limitations section; decisions table; readable model labels; primary-task table first; identical baselines merged; 3 significant figures; two figures per page with computed takeaways.
+- **Critique:** shown from `critique_response.json` with final numbers only. The critic adds a number-free `title` per finding.
+- **Deliverables:** `run.sh` packages `deliverables/generated_report_<N>/` (PDF, representations/, evaluation.csv, downstream_results.csv, methods_summary.md, traceability.md, INDEX.md). The folders are tracked, so `git archive` includes them.
+
 **Sun Nov 29 – Mon Nov 30.** Sync the fine-tune cache if it finished; read both reports and fix the worst problems; clean runs; fresh-clone check; `docs/report.tex` (4 pages); submission zip.
 
 ## 7. Cut list (cut from the top when behind)

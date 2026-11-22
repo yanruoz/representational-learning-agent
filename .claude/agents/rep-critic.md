@@ -31,7 +31,8 @@ Write `outputs/<dataset>/critique.json`:
   "summary": "2-3 sentences: overall trust in the results and the most important issue",
   "checked": ["one line per check above: what you looked at"],
   "findings": [
-    {"check": "<1-7 name>", "severity": "high | medium | low", "finding": "what is wrong, citing file and numbers",
+    {"check": "<1-7 name>", "severity": "high | medium | low", "title": "one short sentence, no numbers (it is shown in the report after the final revision)",
+     "finding": "what is wrong, citing file and numbers",
      "suggested_fix": "a plan-level change (model, encoder, loss, hyperparameter, baseline, exclusion), or 'state as a limitation'"}
   ]
 }

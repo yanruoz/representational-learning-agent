@@ -1,0 +1,113 @@
+# Traceability
+
+## Evidence cited by decisions (file: key = value)
+
+- lsi_single / rna encoder: metrics/baseline_check.json: encoders.rna.lsi.labels.cell_type.all.knn_macro_f1.mean = 0.8362
+- lsi_single / rna encoder: metrics/baseline_check.json: encoders.rna.pca.labels.cell_type.all.knn_macro_f1.mean = 0.7658
+- lsi_single / atac encoder: metrics/baseline_check.json: cross_modal.rna|atac.lsi|lsi.best_foscttm = 0.01652
+- lsi_single / atac encoder: metrics/baseline_check.json: cross_modal.rna|atac.lsi|pca.best_foscttm = 0.04157
+- tt_infonce_lsi / rna encoder: metrics/baseline_check.json: cross_modal.rna|atac.lsi|lsi.best_foscttm = 0.01652
+- tt_infonce_lsi / rna encoder: metrics/baseline_check.json: cross_modal.rna|atac.pca|lsi.best_foscttm = 0.02131
+- tt_infonce_lsi / atac encoder: metrics/baseline_check.json: cross_modal.rna|atac.lsi|lsi.best_foscttm = 0.01652
+- tt_infonce_lsi / atac encoder: metrics/baseline_check.json: cross_modal.rna|atac.lsi|pca.best_foscttm = 0.04157
+- tt_infonce_lsi / loss: profile.json: redundancy.rna.mean_fraction_of_knn_that_are_near_duplicates = 0.0067
+- tt_infonce_lsi / loss: profile.json: redundancy.atac.mean_fraction_of_knn_that_are_near_duplicates = 0.0
+- tt_infonce_lsi / loss: profile.json: redundancy.rna.random_pairs_at_or_above_cutoff = 0.0
+- tt_infonce_lsi / loss: profile.json: labels.cell_type.class_counts.CD14 Mono = 2554
+- tt_vicreg_lsi / rna encoder: metrics/baseline_check.json: cross_modal.rna|atac.lsi|lsi.best_foscttm = 0.01652
+- tt_vicreg_lsi / atac encoder: metrics/baseline_check.json: cross_modal.rna|atac.lsi|pca.best_foscttm = 0.04157
+- tt_vicreg_lsi / loss: profile.json: labels.cell_type.class_counts.CD14 Mono = 2554
+- tt_vicreg_lsi / loss: profile.json: redundancy.rna.mean_fraction_of_knn_that_are_near_duplicates = 0.0067
+- excluded cell_type: profile.json: labels.cell_type.class_counts.HSPC = 17
+- excluded cell_type: profile.json: labels.cell_type.class_counts.Plasma = 12
+- chosen representation: metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.foscttm = 0.01059
+- chosen representation: metrics/summary.json: cca_lsi.metrics.cross_modal_retrieval.atac->rna.foscttm = 0.01522
+- chosen representation: metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.recall@1 = 0.17313
+- chosen representation: metrics/summary.json: cca_lsi.metrics.cross_modal_retrieval.atac->rna.recall@1 = 0.1287
+- use 'Ranking candidate RNA cells for an ATAC-only cell (finding i': metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.foscttm = 0.01059
+- use 'Ranking candidate RNA cells for an ATAC-only cell (finding i': metrics/summary.json: cca_lsi.metrics.cross_modal_retrieval.atac->rna.foscttm = 0.01522
+- use 'Ranking candidate RNA cells for an ATAC-only cell (finding i': metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.recall@50 = 0.87667
+- use 'Ranking candidate RNA cells for an ATAC-only cell (finding i': metrics/summary.json: cca_lsi.metrics.cross_modal_retrieval.atac->rna.recall@50 = 0.8106
+- use 'Exact one-to-one pairing of an ATAC cell with its own RNA pr': metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.recall@1 = 0.17313
+- use 'Exact one-to-one pairing of an ATAC cell with its own RNA pr': metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.median_rank = 8.0
+- use 'Exact one-to-one pairing of an ATAC cell with its own RNA pr': metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.chance_recall@1 = 0.0005
+- use 'Transferring cell_type from RNA-annotated cells to ATAC-only': metrics/summary.json: tt_infonce_lsi.metrics.label_transfer.rna->atac.budgets.all.knn_macro_f1 = 0.89163
+- use 'Transferring cell_type from RNA-annotated cells to ATAC-only': metrics/summary.json: tt_infonce_lsi.metrics.label_transfer.rna->atac.budgets.all.knn_accuracy = 0.93513
+- use 'Transferring cell_type from RNA-annotated cells to ATAC-only': metrics/summary.json: cca_lsi.metrics.label_transfer.rna->atac.budgets.all.knn_macro_f1 = 0.8886
+- use 'Transferring cell_type from RNA-annotated cells to ATAC-only': metrics/summary.json: cca_lsi.metrics.label_transfer.rna->atac.budgets.all.knn_accuracy = 0.9324
+- use 'Transferring cell_type from RNA-annotated cells to ATAC-only': metrics/summary.json: lsi_single.metrics.secondary_label_prediction.cell_type.budgets.all.knn_macro_f1 = 0.9148
+- use 'Transferring cell_type from RNA-annotated cells to ATAC-only': metrics/summary.json: lsi_single.metrics.secondary_label_prediction.cell_type.budgets.all.majority_macro_f1 = 0.0247
+- use 'Transferring cell_type with a linear (logistic-regression) c': metrics/summary.json: tt_infonce_lsi.metrics.label_transfer.rna->atac.budgets.all.linear_macro_f1 = 0.82567
+- use 'Transferring cell_type with a linear (logistic-regression) c': metrics/summary.json: cca_lsi.metrics.label_transfer.rna->atac.budgets.all.linear_macro_f1 = 0.8749
+- use 'Transferring cell_type with a linear (logistic-regression) c': metrics/summary.json: tt_infonce_lsi.metrics.label_transfer.rna->atac.budgets.all.linear_accuracy = 0.893
+- use 'Transferring cell_type with a linear (logistic-regression) c': metrics/summary.json: cca_lsi.metrics.label_transfer.rna->atac.budgets.all.linear_accuracy = 0.9277
+- use 'Separating fine T-cell subtypes (Treg, gdT, CD8 TEM_1) from ': metrics/summary.json: tt_infonce_lsi.metrics.secondary_label_prediction.cell_type.budgets.all.knn_per_class_f1.Treg = 0.69743
+- use 'Separating fine T-cell subtypes (Treg, gdT, CD8 TEM_1) from ': metrics/summary.json: tt_infonce_lsi.metrics.secondary_label_prediction.cell_type.budgets.all.knn_per_class_f1.gdT = 0.7694
+- use 'Separating fine T-cell subtypes (Treg, gdT, CD8 TEM_1) from ': metrics/summary.json: tt_infonce_lsi.metrics.secondary_label_prediction.cell_type.budgets.all.knn_per_class_f1.CD8 TEM_1 = 0.79787
+- use 'Separating fine T-cell subtypes (Treg, gdT, CD8 TEM_1) from ': metrics/summary.json: tt_infonce_lsi.metrics.secondary_label_prediction.cell_type.budgets.all.knn_per_class_f1.CD14 Mono = 0.98153
+- use 'Annotating HSPC and Plasma cells, or applying the model to o': profile.json: labels.cell_type.class_counts.HSPC = 17
+- use 'Annotating HSPC and Plasma cells, or applying the model to o': profile.json: labels.cell_type.class_counts.Plasma = 12
+
+## Numbers in findings.md and critique_response.json
+
+Each decimal number and the first artifact value it matches at the precision written (files under outputs/<dataset>/).
+
+- 0.01059: metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.foscttm.mean
+- 0.01: metrics/summary.json: cca_lsi.metrics.cross_modal_retrieval.atac->rna.chance_recall@10.mean
+- 0.0: metrics/summary.json: lsi_single.metrics.secondary_label_prediction.cell_type.budgets.all.draws.sd
+- 0.00003: metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.foscttm.sd
+- 0.01522: metrics/summary.json: cca_lsi.metrics.cross_modal_retrieval.atac->rna.foscttm.mean
+- 0.5: metrics/summary.json: cca_lsi.metrics.cross_modal_retrieval.atac->rna.chance_foscttm.mean
+- 0.17313: metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.recall@1.mean
+- 0.1287: metrics/summary.json: cca_lsi.metrics.cross_modal_retrieval.atac->rna.recall@1.mean
+- 0.87667: metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.recall@50.mean
+- 0.8106: metrics/summary.json: cca_lsi.metrics.cross_modal_retrieval.atac->rna.recall@50.mean
+- 0.93513: metrics/summary.json: tt_infonce_lsi.metrics.label_transfer.rna->atac.budgets.all.knn_accuracy.mean
+- 0.0009: metrics/summary.json: tt_infonce_lsi.metrics.label_transfer.rna->atac.budgets.all.knn_accuracy.sd
+- 0.89163: metrics/summary.json: tt_infonce_lsi.metrics.label_transfer.rna->atac.budgets.all.knn_macro_f1.mean
+- 0.00171: metrics/summary.json: tt_infonce_lsi.metrics.label_transfer.rna->atac.budgets.all.knn_macro_f1.sd
+- 0.001: metrics/summary.json: cca_lsi.metrics.cross_modal_retrieval.atac->rna.chance_recall@1.mean
+- 0.9324: metrics/summary.json: lsi_single.metrics.secondary_label_prediction.cell_type.budgets.all.linear_accuracy.mean
+- 0.8886: metrics/summary.json: cca_lsi.metrics.label_transfer.rna->atac.budgets.all.knn_macro_f1.mean
+- 0.9148: metrics/summary.json: lsi_single.metrics.secondary_label_prediction.cell_type.budgets.all.knn_macro_f1.mean
+- 0.2: metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.recall@1.mean
+- 0.15: plan.json: split.val_fraction
+- 0.01652: metrics/baseline_check.json: cross_modal.rna|atac.lsi|lsi.cca_validation_by_components.20.foscttm
+- 0.02131: metrics/baseline_check.json: cross_modal.rna|atac.pca|lsi.cca_validation_by_components.20.foscttm
+- 0.04157: metrics/baseline_check.json: cross_modal.rna|atac.lsi|pca.cca_validation_by_components.10.foscttm
+- 0.04666: metrics/baseline_check.json: cross_modal.rna|atac.pca|pca.cca_validation_by_components.10.foscttm
+- 0.8362: metrics/baseline_check.json: encoders.rna.lsi.labels.cell_type.all.knn_macro_f1.mean
+- 0.7658: metrics/baseline_check.json: encoders.rna.pca.labels.cell_type.all.knn_macro_f1.mean
+- 0.0067: profile.json: redundancy.rna.mean_fraction_of_knn_that_are_near_duplicates
+- 0.02491: metrics/summary.json: tt_vicreg_lsi.metrics.cross_modal_retrieval.atac->rna.foscttm.mean
+- 0.00052: metrics/summary.json: tt_vicreg_lsi.metrics.cross_modal_retrieval.atac->rna.foscttm.sd
+- 0.5648: metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.recall@10.mean
+- 0.00506: metrics/summary.json: tt_infonce_lsi.metrics.cross_modal_retrieval.atac->rna.recall@10.sd
+- 0.4504: metrics/summary.json: cca_lsi.metrics.cross_modal_retrieval.atac->rna.recall@10.mean
+- 0.8749: metrics/summary.json: cca_lsi.metrics.label_transfer.rna->atac.budgets.all.linear_macro_f1.mean
+- 0.82567: metrics/summary.json: tt_infonce_lsi.metrics.label_transfer.rna->atac.budgets.all.linear_macro_f1.mean
+- 0.01705: metrics/summary.json: tt_infonce_lsi.metrics.label_transfer.rna->atac.budgets.all.linear_macro_f1.sd
+- 0.9277: metrics/summary.json: cca_lsi.metrics.label_transfer.rna->atac.budgets.all.linear_accuracy.mean
+- 0.893: metrics/summary.json: tt_infonce_lsi.metrics.label_transfer.rna->atac.budgets.all.linear_accuracy.mean
+- 0.00898: metrics/summary.json: tt_infonce_lsi.metrics.label_transfer.rna->atac.budgets.all.linear_accuracy.sd
+- 0.81963: metrics/summary.json: tt_vicreg_lsi.metrics.label_transfer.rna->atac.budgets.all.knn_macro_f1.mean
+- 0.0053: metrics/summary.json: tt_vicreg_lsi.metrics.label_transfer.rna->atac.budgets.all.knn_macro_f1.sd
+- 0.0247: metrics/summary.json: lsi_single.metrics.secondary_label_prediction.cell_type.budgets.all.majority_macro_f1.mean
+- 0.2659: metrics/summary.json: lsi_single.metrics.secondary_label_prediction.cell_type.budgets.all.majority_accuracy.mean
+- 0.9438: metrics/summary.json: lsi_single.metrics.secondary_label_prediction.cell_type.budgets.all.knn_accuracy.mean
+- 0.887: metrics/summary.json: lsi_single.metrics.secondary_label_prediction.cell_type.budgets.all.linear_macro_f1.mean
+- 0.89317: metrics/summary.json: tt_infonce_lsi.metrics.secondary_label_prediction.cell_type.budgets.all.knn_macro_f1.mean
+- 0.00156: metrics/summary.json: tt_infonce_lsi.metrics.secondary_label_prediction.cell_type.budgets.all.knn_macro_f1.sd
+- 0.69743: metrics/summary.json: tt_infonce_lsi.metrics.secondary_label_prediction.cell_type.budgets.all.knn_per_class_f1.Treg.mean
+- 0.7694: metrics/summary.json: tt_infonce_lsi.metrics.secondary_label_prediction.cell_type.budgets.all.knn_per_class_f1.gdT.mean
+- 0.98153: metrics/summary.json: tt_infonce_lsi.metrics.secondary_label_prediction.cell_type.budgets.all.knn_per_class_f1.CD14 Mono.mean
+- 0.32853: metrics/summary.json: tt_vicreg_lsi.metrics.secondary_label_prediction.cell_type.budgets.all.knn_per_class_f1.Naive B.mean
+- 0.46457: metrics/summary.json: tt_vicreg_lsi.metrics.secondary_label_prediction.cell_type.budgets.all.knn_per_class_f1.Treg.mean
+- 23.41: metrics/collapse.json: tt_infonce_lsi.learned.tt_infonce_lsi_s0.rna.effective_rank
+- 22.03: metrics/collapse.json: tt_infonce_lsi.learned.tt_infonce_lsi_s0.atac.effective_rank
+- 12.64: metrics/collapse.json: tt_vicreg_lsi.learned.tt_vicreg_lsi_s0.rna.effective_rank
+- 0.0003: plan.json: models[3].hyperparameters.lr
+- 0.05067921057343483: runs/tt_infonce_lsi_s0.json: final_temperature
+- 0.05430462956428528: runs/tt_infonce_lsi_s2.json: final_temperature
+- 0.02033: runs/cca_lsi_s0.json: built.validation_foscttm_by_components.20
+- 0.64: run_log.json: minutes

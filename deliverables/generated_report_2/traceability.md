@@ -1,0 +1,168 @@
+# Traceability
+
+## Evidence cited by decisions (file: key = value)
+
+- pix_single / image encoder: metrics/baseline_check.json: encoders.image.pixels_pca.labels.body_region.5.knn_macro_f1.mean = 0.307
+- pix_single / image encoder: metrics/baseline_check.json: encoders.image.pixels_pca.labels.body_region.5.majority_macro_f1.mean = 0.0753
+- pix_logreg / image encoder: metrics/baseline_check.json: encoders.image.pixels_pca.labels.body_region.5.linear_macro_f1.mean = 0.2664
+- pix_logreg / image encoder: metrics/baseline_check.json: encoders.image.pixels_pca.labels.body_region.all.linear_macro_f1.mean = 0.4815
+- dino_frozen / image encoder: metrics/baseline_check.json: encoders.image.cache:dinov2_vitb14_frozen.labels.body_region.5.linear_macro_f1.mean = 0.6739
+- dino_frozen / image encoder: metrics/baseline_check.json: encoders.image.cache:dinov2_vitb14_frozen.labels.body_region.20.linear_macro_f1.mean = 0.7395
+- dino_frozen / image encoder: profile.json: cache.dinov2_vitb14_frozen.pretraining_data = LVD-142M: about 142 million web images selected by visual similarity to curated image datasets; no captions or text were used.
+- bmc_frozen / image encoder: metrics/baseline_check.json: encoders.image.cache:biomedclip_frozen.labels.body_region.5.linear_macro_f1.mean = 0.8095
+- bmc_frozen / image encoder: metrics/baseline_check.json: encoders.image.cache:dinov2_vitb14_frozen.labels.body_region.5.linear_macro_f1.mean = 0.6739
+- bmc_frozen / image encoder: profile.json: cache.biomedclip_frozen.pretraining_data = PMC-15M: about 15 million figure-caption pairs from PubMed Central Open Access articles (images and captions).
+- tt_dino_bmccap_infonce / image encoder: metrics/baseline_check.json: encoders.image.cache:dinov2_vitb14_frozen.labels.body_region.5.linear_macro_f1.mean = 0.6739
+- tt_dino_bmccap_infonce / image encoder: metrics/baseline_check.json: encoders.image.cache:biomedclip_frozen.labels.body_region.5.linear_macro_f1.mean = 0.8095
+- tt_dino_bmccap_infonce / caption encoder: metrics/baseline_check.json: cross_modal.image|caption.cache:dinov2_vitb14_frozen|cache:biomedclip_frozen.best_foscttm = 0.04713
+- tt_dino_bmccap_infonce / caption encoder: metrics/baseline_check.json: cross_modal.image|caption.cache:dinov2_vitb14_frozen|tfidf_svd.best_foscttm = 0.14936
+- tt_dino_bmccap_infonce / loss: profile.json: redundancy.caption (biomedclip_frozen).mean_fraction_of_knn_that_are_near_duplicates = 0.0077
+- tt_dino_bmccap_infonce / loss: profile.json: redundancy.caption (biomedclip_frozen).random_pairs_at_or_above_cutoff = 0.0001
+- tt_dino_bmccap_infonce / loss: profile.json: redundancy.image (dinov2_vitb14_frozen).samples_with_a_near_duplicate = 0.2327
+- tt_dino_bmccap_infonce / loss: profile.json: redundancy.image (dinov2_vitb14_frozen).mean_fraction_of_knn_that_are_near_duplicates = 0.1879
+- tt_dino_bmccap_infonce / loss: profile.json: redundancy.image (dinov2_vitb14_frozen).random_pairs_at_or_above_cutoff = 0.0053
+- tt_dino_bmccap_infonce_concat / image encoder: metrics/baseline_check.json: encoders.image.cache:dinov2_vitb14_frozen.labels.body_region.all.linear_macro_f1.mean = 0.8245
+- tt_dino_bmccap_infonce_concat / image encoder: metrics/baseline_check.json: encoders.image.cache:dinov2_vitb14_frozen.effective_rank = 442.71
+- tt_dino_bmccap_infonce_concat / caption encoder: metrics/baseline_check.json: cross_modal.image|caption.cache:dinov2_vitb14_frozen|cache:biomedclip_frozen.best_foscttm = 0.04713
+- tt_dino_bmccap_infonce_concat / loss: profile.json: redundancy.caption (biomedclip_frozen).mean_fraction_of_knn_that_are_near_duplicates = 0.0077
+- tt_dino_bmccap_vicreg / image encoder: metrics/baseline_check.json: encoders.image.cache:dinov2_vitb14_frozen.labels.body_region.5.linear_macro_f1.mean = 0.6739
+- tt_dino_bmccap_vicreg / caption encoder: metrics/baseline_check.json: cross_modal.image|caption.cache:dinov2_vitb14_frozen|cache:biomedclip_frozen.best_foscttm = 0.04713
+- tt_dino_bmccap_vicreg / loss: profile.json: redundancy.image (dinov2_vitb14_frozen).mean_fraction_of_knn_that_are_near_duplicates = 0.1879
+- tt_dino_bmccap_vicreg / loss: profile.json: labels.body_region.class_counts.chest = 1031
+- tt_dino_bmccap_vicreg / loss: profile.json: redundancy.caption (biomedclip_frozen).mean_fraction_of_knn_that_are_near_duplicates = 0.0077
+- tt_dino_tfidf_infonce / image encoder: metrics/baseline_check.json: encoders.image.cache:dinov2_vitb14_frozen.labels.body_region.5.linear_macro_f1.mean = 0.6739
+- tt_dino_tfidf_infonce / caption encoder: metrics/baseline_check.json: cross_modal.image|caption.cache:dinov2_vitb14_frozen|tfidf_svd.best_foscttm = 0.14936
+- tt_dino_tfidf_infonce / caption encoder: metrics/baseline_check.json: cross_modal.image|caption.cache:dinov2_vitb14_frozen|cache:biomedclip_frozen.best_foscttm = 0.04713
+- tt_dino_tfidf_infonce / loss: profile.json: redundancy.caption.mean_fraction_of_knn_that_are_near_duplicates = 0.0014
+- tt_dino_tfidf_infonce / loss: profile.json: redundancy.caption.random_pairs_at_or_above_cutoff = 0.0
+- tt_pix_tfidf_infonce / image encoder: metrics/baseline_check.json: encoders.image.pixels_pca.labels.body_region.5.knn_macro_f1.mean = 0.307
+- tt_pix_tfidf_infonce / caption encoder: metrics/baseline_check.json: cross_modal.image|caption.pixels_pca|tfidf_svd.best_foscttm = 0.30264
+- tt_pix_tfidf_infonce / loss: profile.json: redundancy.caption.mean_fraction_of_knn_that_are_near_duplicates = 0.0014
+- excluded body_region: profile.json: labels.body_region.class_counts_by_split.train.breast = 9
+- excluded body_region: profile.json: labels.body_region.class_counts_by_split.test.breast = 4
+- chosen representation: metrics/summary.json: bmc_frozen.metrics.label_prediction.body_region.budgets.5.linear_macro_f1 = 0.7322
+- chosen representation: metrics/summary.json: bmc_frozen.metrics.label_prediction.body_region.budgets.all.linear_macro_f1 = 0.8154
+- chosen representation: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.linear_macro_f1 = 0.59943
+- chosen representation: metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.5.linear_macro_f1 = 0.5983
+- use 'Identifying the body region of a plain radiograph from the i': metrics/summary.json: bmc_frozen.metrics.label_prediction.body_region.budgets.5.linear_macro_f1 = 0.7322
+- use 'Identifying the body region of a plain radiograph from the i': metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.5.linear_macro_f1 = 0.5983
+- use 'Identifying the body region of a plain radiograph from the i': metrics/summary.json: pix_single.metrics.label_prediction.body_region.budgets.5.linear_macro_f1 = 0.2471
+- use 'Identifying the body region of a plain radiograph from the i': metrics/summary.json: bmc_frozen.metrics.label_prediction.body_region.budgets.5.majority_macro_f1 = 0.0799
+- use 'Identifying the body region of a plain radiograph from the i': metrics/summary.json: bmc_frozen.metrics.label_prediction.body_region.budgets.all.linear_macro_f1 = 0.8154
+- use 'Training a caption-aligned head on DINOv2 to improve linear-': metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.linear_macro_f1 = 0.59943
+- use 'Training a caption-aligned head on DINOv2 to improve linear-': metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.5.linear_macro_f1 = 0.5983
+- use 'Training a caption-aligned head on DINOv2 to improve linear-': metrics/summary.json: tt_dino_bmccap_vicreg.metrics.label_prediction.body_region.budgets.5.linear_macro_f1 = 0.62143
+- use 'Training a caption-aligned head on DINOv2 to improve linear-': metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.100.linear_macro_f1 = 0.6724
+- use 'Training a caption-aligned head on DINOv2 to improve linear-': metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.100.linear_macro_f1 = 0.7242
+- use 'Training a caption-aligned head on DINOv2 to improve linear-': metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.all.linear_macro_f1 = 0.7243
+- use 'Training a caption-aligned head on DINOv2 to improve linear-': metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.all.linear_macro_f1 = 0.7449
+- use 'Nearest-neighbor (kNN) region labeling with 5 to 20 labels p': metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.knn_macro_f1 = 0.59797
+- use 'Nearest-neighbor (kNN) region labeling with 5 to 20 labels p': metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.5.knn_macro_f1 = 0.4867
+- use 'Nearest-neighbor (kNN) region labeling with 5 to 20 labels p': metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.20.knn_macro_f1 = 0.681
+- use 'Nearest-neighbor (kNN) region labeling with 5 to 20 labels p': metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.20.knn_macro_f1 = 0.6067
+- use 'Nearest-neighbor (kNN) region labeling with 5 to 20 labels p': metrics/summary.json: cca_dino_bmccap.metrics.label_prediction.body_region.budgets.5.knn_macro_f1 = 0.5638
+- use 'Nearest-neighbor (kNN) region labeling with 5 to 20 labels p': metrics/summary.json: tt_dino_tfidf_infonce.metrics.label_prediction.body_region.budgets.5.knn_macro_f1 = 0.6135
+- use 'Using captions to improve an image representation built only': metrics/summary.json: tt_pix_tfidf_infonce.metrics.label_prediction.body_region.budgets.5.linear_macro_f1 = 0.32373
+- use 'Using captions to improve an image representation built only': metrics/summary.json: pix_single.metrics.label_prediction.body_region.budgets.5.linear_macro_f1 = 0.2471
+- use 'Using captions to improve an image representation built only': metrics/summary.json: tt_pix_tfidf_infonce.metrics.label_prediction.body_region.budgets.5.knn_macro_f1 = 0.346
+- use 'Using captions to improve an image representation built only': metrics/summary.json: pix_single.metrics.label_prediction.body_region.budgets.5.knn_macro_f1 = 0.3011
+- use 'Using captions to improve an image representation built only': metrics/summary.json: tt_pix_tfidf_infonce.metrics.label_prediction.body_region.budgets.all.linear_macro_f1 = 0.44003
+- use 'Using captions to improve an image representation built only': metrics/summary.json: pix_single.metrics.label_prediction.body_region.budgets.all.linear_macro_f1 = 0.4249
+- use 'Few-shot labeling of the smaller or harder regions (spine, u': metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.linear_per_class_f1.spine = 0.42213
+- use 'Few-shot labeling of the smaller or harder regions (spine, u': metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.linear_per_class_f1.upper limb = 0.32687
+- use 'Few-shot labeling of the smaller or harder regions (spine, u': metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.linear_per_class_f1.chest = 0.9124
+- use 'Labeling breast images, or body region on CT, MRI, ultrasoun': profile.json: labels.body_region.class_counts_by_split.train.breast = 9
+- use 'Labeling breast images, or body region on CT, MRI, ultrasoun': profile.json: labels.body_region.class_counts_by_split.test.breast = 4
+
+## Numbers in findings.md and critique_response.json
+
+Each decimal number and the first artifact value it matches at the precision written (files under outputs/<dataset>/).
+
+- 0.59943: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.mean
+- 0.00674: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.sd
+- 0.5983: metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.mean
+- 0.0262: metrics/summary.json: tt_dino_tfidf_infonce.metrics.secondary_label_prediction.modality.budgets.all.knn_per_class_f1.PET.sd
+- 0.6724: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.100.linear_macro_f1.mean
+- 0.7242: metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.100.linear_macro_f1.mean
+- 0.59797: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.knn_macro_f1.mean
+- 0.4867: metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.5.knn_macro_f1.mean
+- 0.7322: metrics/summary.json: bmc_frozen.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.mean
+- 0.8154: metrics/summary.json: bmc_frozen.metrics.label_prediction.body_region.budgets.all.linear_macro_f1.mean
+- 0.15: metrics/summary.json: pix_single.metrics.label_prediction.body_region.budgets.20.knn_per_class_f1.spine.mean
+- 0.2664: metrics/baseline_check.json: encoders.image.pixels_pca.labels.body_region.5.linear_macro_f1.mean
+- 0.6739: metrics/summary.json: pix_single.metrics.label_prediction.body_region.budgets.all.knn_per_class_f1.skull and jaw.mean
+- 0.8095: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.all.linear_accuracy.mean
+- 0.04713: metrics/baseline_check.json: cross_modal.image|caption.cache:dinov2_vitb14_frozen|cache:biomedclip_frozen.cca_validation_by_components.20.foscttm
+- 0.14936: metrics/baseline_check.json: cross_modal.image|caption.cache:dinov2_vitb14_frozen|tfidf_svd.cca_validation_by_components.10.foscttm
+- 0.0077: metrics/summary.json: cca_dino_bmccap.metrics.label_prediction.body_region.budgets.all.knn_macro_f1.sd
+- 0.2327: profile.json: redundancy.image (dinov2_vitb14_frozen).samples_with_a_near_duplicate
+- 0.0389: metrics/dino_frozen_s0.json: tasks.label_prediction.body_region.budgets.5.knn_macro_f1.sd
+- 0.0267: metrics/summary.json: tt_pix_tfidf_infonce.metrics.label_prediction.body_region.budgets.100.linear_per_class_f1.spine.sd
+- 0.018: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.20.linear_per_class_f1.upper limb.sd
+- 0.6777: metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.20.linear_macro_f1.mean
+- 0.7449: metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.all.linear_macro_f1.mean
+- 0.6608: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.20.linear_macro_f1.mean
+- 0.00408: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.20.linear_macro_f1.sd
+- 0.7243: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.all.linear_macro_f1.mean
+- 0.0051: metrics/summary.json: cca_dino_bmccap.metrics.label_prediction.body_region.budgets.100.linear_per_class_f1.lower limb.sd
+- 0.62143: metrics/summary.json: tt_dino_bmccap_vicreg.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.mean
+- 0.00224: metrics/summary.json: tt_dino_bmccap_vicreg.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.sd
+- 0.66827: metrics/summary.json: tt_dino_bmccap_vicreg.metrics.label_prediction.body_region.budgets.20.linear_macro_f1.mean
+- 0.00625: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.linear_per_class_f1.chest.sd
+- 0.7279: metrics/summary.json: tt_dino_bmccap_vicreg.metrics.label_prediction.body_region.budgets.all.linear_macro_f1.mean
+- 0.01026: metrics/summary.json: tt_dino_bmccap_vicreg.metrics.label_prediction.body_region.budgets.all.linear_macro_f1.sd
+- 0.60483: metrics/summary.json: tt_dino_tfidf_infonce.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.mean
+- 0.01015: metrics/summary.json: tt_dino_tfidf_infonce.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.sd
+- 0.6604: metrics/summary.json: tt_dino_tfidf_infonce.metrics.label_prediction.body_region.budgets.20.linear_macro_f1.mean
+- 0.00604: metrics/summary.json: tt_dino_tfidf_infonce.metrics.label_prediction.body_region.budgets.20.linear_macro_f1.sd
+- 0.71293: metrics/summary.json: tt_dino_tfidf_infonce.metrics.label_prediction.body_region.budgets.all.linear_macro_f1.mean
+- 0.02825: metrics/summary.json: tt_dino_tfidf_infonce.metrics.label_prediction.body_region.budgets.all.linear_macro_f1.sd
+- 0.60693: metrics/summary.json: tt_dino_bmccap_infonce_concat.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.mean
+- 0.0009: metrics/summary.json: cca_dino_bmccap.metrics.clustering.body_region.ari.sd
+- 0.678: metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.20.linear_macro_f1.mean
+- 0.00335: metrics/summary.json: tt_dino_bmccap_infonce_concat.metrics.label_prediction.body_region.budgets.20.linear_macro_f1.sd
+- 0.74163: metrics/summary.json: tt_dino_bmccap_infonce_concat.metrics.label_prediction.body_region.budgets.all.linear_macro_f1.mean
+- 0.01062: metrics/summary.json: tt_dino_bmccap_infonce_concat.metrics.label_prediction.body_region.budgets.all.linear_macro_f1.sd
+- 0.54793: metrics/summary.json: cca_dino_bmccap.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.mean
+- 0.00225: metrics/summary.json: cca_dino_bmccap.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.sd
+- 0.65097: metrics/summary.json: cca_dino_bmccap.metrics.label_prediction.body_region.budgets.20.linear_macro_f1.mean
+- 0.0025: metrics/summary.json: cca_dino_bmccap.metrics.label_prediction.body_region.budgets.20.linear_macro_f1.sd
+- 0.00135: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.100.linear_macro_f1.sd
+- 0.00301: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.knn_macro_f1.sd
+- 0.681: metrics/summary.json: cca_dino_bmccap.metrics.label_prediction.body_region.budgets.100.linear_macro_f1.mean
+- 0.00829: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.20.knn_macro_f1.sd
+- 0.6067: metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.20.knn_macro_f1.mean
+- 0.1769: metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.5.knn_per_class_f1.spine.mean
+- 0.3766: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.knn_per_class_f1.spine.mean
+- 0.4553: metrics/summary.json: dino_frozen.metrics.label_prediction.body_region.budgets.5.knn_per_class_f1.abdomen.mean
+- 0.6316: metrics/summary.json: bmc_frozen.metrics.label_prediction.body_region.budgets.all.knn_per_class_f1.spine.mean
+- 0.5638: metrics/summary.json: cca_dino_bmccap.metrics.label_prediction.body_region.budgets.5.knn_macro_f1.mean
+- 0.6135: metrics/summary.json: tt_dino_tfidf_infonce.metrics.label_prediction.body_region.budgets.5.knn_macro_f1.mean
+- 0.62197: metrics/summary.json: tt_dino_bmccap_vicreg.metrics.label_prediction.body_region.budgets.5.knn_macro_f1.mean
+- 52.04: metrics/collapse.json: tt_dino_bmccap_infonce.learned.tt_dino_bmccap_infonce_s0.image.effective_rank
+- 0.32373: metrics/summary.json: tt_pix_tfidf_infonce.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.mean
+- 0.00418: metrics/summary.json: tt_pix_tfidf_infonce.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.sd
+- 0.2471: metrics/summary.json: pix_single.metrics.label_prediction.body_region.budgets.5.linear_macro_f1.mean
+- 0.0512: metrics/summary.json: tt_dino_bmccap_infonce_concat.metrics.label_prediction.body_region.budgets.all.knn_per_class_f1.spine.sd
+- 0.346: metrics/summary.json: tt_pix_tfidf_infonce.metrics.label_prediction.body_region.budgets.5.knn_macro_f1.mean
+- 0.0069: metrics/summary.json: cca_dino_bmccap.metrics.label_prediction.body_region.budgets.100.knn_per_class_f1.lower limb.sd
+- 0.3011: metrics/summary.json: pix_single.metrics.label_prediction.body_region.budgets.5.knn_macro_f1.mean
+- 0.44003: metrics/summary.json: tt_pix_tfidf_infonce.metrics.label_prediction.body_region.budgets.all.linear_macro_f1.mean
+- 0.0147: metrics/summary.json: tt_pix_tfidf_infonce.metrics.label_prediction.body_region.budgets.all.linear_macro_f1.sd
+- 0.4249: metrics/summary.json: pix_single.metrics.label_prediction.body_region.budgets.all.linear_macro_f1.mean
+- 0.0799: metrics/summary.json: pix_single.metrics.label_prediction.body_region.budgets.100.majority_macro_f1.mean
+- 0.9102: metrics/summary.json: dino_frozen.metrics.secondary_label_prediction.modality.budgets.all.knn_macro_f1.mean
+- 0.8999: metrics/summary.json: dino_frozen.metrics.secondary_label_prediction.modality.budgets.all.linear_macro_f1.mean
+- 0.9365: metrics/summary.json: tt_dino_bmccap_infonce.metrics.secondary_label_prediction.modality.budgets.all.knn_macro_f1.mean
+- 0.94107: metrics/summary.json: tt_dino_bmccap_infonce.metrics.secondary_label_prediction.modality.budgets.all.linear_macro_f1.mean
+- 0.00286: metrics/summary.json: tt_dino_bmccap_infonce.metrics.secondary_label_prediction.modality.budgets.all.linear_macro_f1.sd
+- 0.9583: metrics/summary.json: bmc_frozen.metrics.secondary_label_prediction.modality.budgets.all.knn_macro_f1.mean
+- 0.9288: metrics/summary.json: bmc_frozen.metrics.secondary_label_prediction.modality.budgets.all.linear_macro_f1.mean
+- 0.42213: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.linear_per_class_f1.spine.mean
+- 0.32687: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.linear_per_class_f1.upper limb.mean
+- 0.9124: metrics/summary.json: tt_dino_bmccap_infonce.metrics.label_prediction.body_region.budgets.5.linear_per_class_f1.chest.mean
+- 0.5051: metrics/baseline_check.json: encoders.image.cache:dinov2_vitb14_frozen.labels.body_region.5.knn_macro_f1.mean
+- 25.86: metrics/collapse.json: tt_dino_bmccap_vicreg.learned.tt_dino_bmccap_vicreg_s0.image.effective_rank
+- 24.54: metrics/collapse.json: tt_dino_bmccap_vicreg.learned.tt_dino_bmccap_vicreg_s1.image.effective_rank
+- 25.51: metrics/collapse.json: tt_dino_bmccap_vicreg.learned.tt_dino_bmccap_vicreg_s2.image.effective_rank
+- 0.328: metrics/summary.json: tt_pix_tfidf_infonce.metrics.label_prediction.body_region.budgets.100.knn_per_class_f1.upper limb.mean

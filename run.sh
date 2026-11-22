@@ -122,5 +122,7 @@ if [[ $SMOKE -eq 1 ]]; then
 fi
 PDF="reports/$DATASET/generated_report_$REPORT_NUMBER.pdf"
 [[ -f "$PDF" ]] || { echo "FAIL: $PDF was not produced" >&2; exit 1; }
+# Package the five required outputs into deliverables/generated_report_<N>/ (scripts only; the agent never writes there).
+venv/bin/python scripts/package_deliverables.py --dataset "$DATASET" --report-number "$REPORT_NUMBER"
 [[ $STATUS -eq 0 ]] || { echo "FAIL: agent run ended with an error (see $OUT/agent_result.json)" >&2; exit 1; }
 echo "DONE: $PDF"

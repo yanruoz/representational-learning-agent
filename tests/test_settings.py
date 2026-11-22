@@ -88,6 +88,11 @@ class TestPipelineIsolation(unittest.TestCase):
             allow = f"Bash(venv/bin/python scripts/{script} --dataset x)"
             self.assertTrue(_covered(allow, self.pipe["deny"]), f"{script} is runnable by the agent")
 
+    def test_agent_cannot_write_deliverables(self):
+        # deliverables/ is packaged by run.sh (scripts/package_deliverables.py), never by the agent.
+        for rule in ("Edit(./deliverables/**)", "Write(./deliverables/**)"):
+            self.assertIn(rule, self.pipe["deny"])
+
     def test_dev_denies_push(self):
         self.assertTrue(any(_split(r) == ("Bash", "git push *") for r in self.dev["deny"]))
 

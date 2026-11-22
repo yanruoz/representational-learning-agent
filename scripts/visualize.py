@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import context
+import labels
 import plan_schema
 
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
@@ -32,6 +33,13 @@ INK, MUTED, GRID = "#1f1f1e", "#5f5e5a", "#e6e4dc"
 plt.rcParams.update({"font.size": 9, "axes.edgecolor": MUTED, "axes.labelcolor": INK, "xtick.color": MUTED,
                      "ytick.color": MUTED, "axes.spines.top": False, "axes.spines.right": False,
                      "axes.grid": True, "grid.color": GRID, "grid.linewidth": 0.6, "legend.frameon": False})
+
+
+NAMES = {}
+
+
+def _n(mid):
+    return NAMES.get(mid, mid)
 
 
 def colors_for(plan):
@@ -71,9 +79,9 @@ def label_budget_figure(out, summary, label, budgets, colors, task_key="label_pr
             ys = [pts[order[i]][0] for i in xs]
             es = [pts[order[i]][1] for i in xs]
             if len(xs) == 1:
-                ax.errorbar(xs, ys, yerr=es, fmt="o", ms=6, color=colors.get(mid, INK), label=mid, capsize=3, lw=1.5)
+                ax.errorbar(xs, ys, yerr=es, fmt="o", ms=6, color=colors.get(mid, INK), label=_n(mid), capsize=3, lw=1.5)
             else:
-                ax.errorbar(xs, ys, yerr=es, marker="o", ms=5, lw=2, color=colors.get(mid, INK), label=mid, capsize=3)
+                ax.errorbar(xs, ys, yerr=es, marker="o", ms=5, lw=2, color=colors.get(mid, INK), label=_n(mid), capsize=3)
         mk = _series(summary, lambda k: k[len(prefix):].split(".")[0]
                      if k.startswith(prefix) and k.endswith(".majority_macro_f1") else None)
         if mk:
@@ -86,8 +94,8 @@ def label_budget_figure(out, summary, label, budgets, colors, task_key="label_pr
     axes[0].set_ylabel(f"macro-F1, {label} (test)")
     axes[0].set_ylim(0, 1)
     h, l = axes[0].get_legend_handles_labels()
-    fig.legend(h, l, loc="lower center", ncol=min(4, len(l)), fontsize=8, bbox_to_anchor=(0.5, -0.02))
-    fig.tight_layout(rect=(0, 0.12, 1, 1))
+    fig.legend(h, l, loc="lower center", ncol=min(3, len(l)), fontsize=7, bbox_to_anchor=(0.5, -0.02))
+    fig.tight_layout(rect=(0, 0.06 + 0.035 * ((len(l) + 2) // 3), 1, 1))
     path = out / "figures" / f"{'label' if task_key == 'label_prediction' else 'secondary'}_budget_{label}.png"
     fig.savefig(path, dpi=200)
     plt.close(fig)
@@ -104,7 +112,7 @@ def matching_figure(out, summary, pair, colors):
     y = np.arange(len(ids))
     f = [m[f"{base}foscttm"] for _, m in rows]
     axes[0].barh(y, [v["mean"] for v in f], xerr=[v["sd"] for v in f], color=[colors.get(i, INK) for i in ids], height=0.6, capsize=3)
-    axes[0].set_yticks(y, ids)
+    axes[0].set_yticks(y, [_n(i) for i in ids], fontsize=7)
     axes[0].invert_yaxis()
     axes[0].set_xlabel("FOSCTTM (lower is better; chance 0.5)")
     axes[0].set_title("Fraction of samples closer than the true match", fontsize=10, color=INK)
@@ -112,7 +120,7 @@ def matching_figure(out, summary, pair, colors):
     w = 0.8 / len(ids)
     for j, (mid, m) in enumerate(rows):
         axes[1].bar(np.arange(len(ks)) + j * w, [m[f"{base}recall@{k}"]["mean"] for k in ks], width=w * 0.9,
-                    yerr=[m[f"{base}recall@{k}"]["sd"] for k in ks], color=colors.get(mid, INK), label=mid, capsize=2)
+                    yerr=[m[f"{base}recall@{k}"]["sd"] for k in ks], color=colors.get(mid, INK), label=_n(mid), capsize=2)
     chance = [rows[0][1][f"{base}chance_recall@{k}"]["mean"] for k in ks]
     for i, c in enumerate(chance):
         axes[1].hlines(c, i - 0.05, i + 0.85, ls="--", lw=1, color=MUTED)
@@ -139,7 +147,7 @@ def transfer_figure(out, summary, pair, colors):
         v = [m[f"{base}{probe}_macro_f1"] for _, m in rows]
         ax.barh(y + (j - 0.5) * 0.38, [x["mean"] for x in v], xerr=[x["sd"] for x in v], height=0.36,
                 color=[colors.get(i, INK) for i in ids], alpha=1.0 if probe == "knn" else 0.55, capsize=2)
-    ax.set_yticks(y, ids)
+    ax.set_yticks(y, [_n(i) for i in ids], fontsize=7)
     ax.invert_yaxis()
     ax.set_xlim(0, 1)
     ax.set_xlabel(f"macro-F1 of labels transferred {pair} (solid: kNN, light: linear)")
@@ -165,7 +173,7 @@ def training_curves(out, plan, colors):
         y = np.array([e[key] for e in h])
         y = (y - y.min()) / max(y.max() - y.min(), 1e-12)
         ax.plot([e["epoch"] for e in h], y, lw=2, color=colors.get(m["id"], INK),
-                label=f"{m['id']} ({'validation' if key == 'val_loss' else 'training'}; {r['stop_reason'].split(' (')[0]})")
+                label=f"{_n(m['id'])} ({'validation' if key == 'val_loss' else 'training'}; {r['stop_reason'].split(' (')[0]})")
     ax.set_xlabel("epoch")
     ax.set_ylabel("loss, rescaled to [0, 1] per model")
     ax.legend(fontsize=7, loc="upper right")
@@ -183,20 +191,21 @@ def collapse_figure(out, colors):
     c = json.loads(p.read_text())
     if not c:
         return None
-    labels, inp, lrn, cols = [], [], [], []
+    labels_, inp, lrn, cols = [], [], [], []
     for mid, v in c.items():
         for mod, x in v["inputs"].items():
             learned = [r[mod]["effective_rank"] for r in v["learned"].values() if mod in r]
-            labels.append(f"{mid}\n{mod}")
+            labels_.append(f"{_n(mid)} / {mod}")
             inp.append(x["effective_rank"])
             lrn.append(np.mean(learned) if learned else np.nan)
             cols.append(colors.get(mid, INK))
-    fig, ax = plt.subplots(figsize=(max(6, 0.9 * len(labels)), 3.4))
-    x = np.arange(len(labels))
-    ax.bar(x - 0.2, inp, width=0.38, color="#b4b2a9", label="input features")
-    ax.bar(x + 0.2, lrn, width=0.38, color=cols, label="learned embedding (mean over runs)")
-    ax.set_xticks(x, labels, fontsize=7)
-    ax.set_ylabel("effective rank (test samples)")
+    fig, ax = plt.subplots(figsize=(8, 0.5 + 0.32 * len(labels_)))
+    y = np.arange(len(labels_))
+    ax.barh(y - 0.2, inp, height=0.38, color="#b4b2a9", label="input features")
+    ax.barh(y + 0.2, lrn, height=0.38, color=cols, label="learned embedding (mean over runs)")
+    ax.set_yticks(y, labels_, fontsize=7)
+    ax.invert_yaxis()
+    ax.set_xlabel("effective rank (test samples)")
     ax.legend(fontsize=8)
     fig.tight_layout()
     path = out / "figures" / "collapse.png"
@@ -228,9 +237,9 @@ def embedding_2d(ctx, plan, summary, colors):
     import features
     base = next((m for m in plan["models"] if m["method"] in plan_schema.BASELINE_METHODS and mod in m["inputs"]
                  and m["inputs"][mod]["encoder"] in plan_schema.NO_PRETRAINING), None)
-    panels = [(f"{best} ({mod})", Zb)]
+    panels = [(f"{_n(best)} ({mod})", Zb)]
     if base:
-        panels.insert(0, (f"{base['id']} ({mod}, no pretraining)", features.featurize(ctx, mod, base["inputs"][mod]["encoder"])))
+        panels.insert(0, (f"{_n(base['id'])} ({mod})", features.featurize(ctx, mod, base["inputs"][mod]["encoder"])))
     te = ctx.labeled(label, ctx.test)
     y = ctx.labels(label)[te].astype(str)
     classes = sorted(set(y), key=lambda c: -np.sum(y == c))
@@ -269,6 +278,7 @@ def main():
     summary = json.loads((out / "metrics" / "summary.json").read_text())
     (out / "figures").mkdir(exist_ok=True)
     colors = colors_for(plan)
+    NAMES.update(labels.model_labels(plan, obj))
     made = []
     for t in obj["tasks"]:
         if t["task"] == "label_prediction":
