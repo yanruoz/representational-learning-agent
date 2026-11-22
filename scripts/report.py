@@ -10,7 +10,8 @@
      Data and split               profile.json, split sizes, training pool, excluded classes, reasons
      Evidence before choosing     metrics/baseline_check.json (validation split only)
      Methods: encoders and losses every model: method, per-modality encoder and head, training loss,
-                                  hyperparameters, each with its reason and the evidence it cites
+                                  each with its reason and the evidence it cites (hyperparameter
+                                  reasons are in an appendix at the end)
      Results                      metrics/summary.json per task, mean ± SD over seeds
      Training and collapse        runs/*.json and metrics/collapse.json
      Figures, Findings (findings.md), Downstream use (recommendation.json), Critique, Limitations,
@@ -399,8 +400,9 @@ def methods_pages(a):
             lines.append(f"- training loss: {m['loss']}. Reason: {m.get('loss_reason', '')}")
             if m.get("loss_evidence"):
                 lines.append(f"  Evidence: {_ev(m['loss_evidence'])}")
-        for k, v in (m.get("hyperparameters") or {}).items():
-            lines.append(f"- {k} = {v}: {(m.get('hyperparameter_reasons') or {}).get(k, '')}")
+        if m.get("hyperparameters"):
+            lines.append("- hyperparameters: " + ", ".join(f"{k} = {v}" for k, v in m["hyperparameters"].items())
+                         + " (reasons in the appendix)")
         blocks.append((f"{m['id']}", lines))
     rev = a["plan"].get("critique_applied")
     if rev:
@@ -408,48 +410,68 @@ def methods_pages(a):
     return text_pages("Methods: encoders, losses, and why", blocks)
 
 
+def _cell(v):
+    if v is None:
+        return "-"
+    sd = f"±{v['sd']:.3f}".replace("0.", ".") if v.get("n", 1) > 1 else ""
+    return f"{v['mean']:.3f}{sd}"
+
+
+def _table(header, rows, w0=30, w=13):
+    lines = [f"{header[0]:{w0}s}" + "".join(f"{h:>{w}s}" for h in header[1:])]
+    lines += [f"{r[0][:w0 - 1]:{w0}s}" + "".join(f"{c:>{w}s}" for c in r[1:]) for r in rows]
+    return "```" + "\n".join(lines) + "```"
+
+
+def hyperparameter_pages(a):
+    blocks = []
+    for m in a["plan"].get("models", []):
+        hp = m.get("hyperparameters") or {}
+        if hp:
+            blocks.append((m["id"], [f"- {k} = {v}: {(m.get('hyperparameter_reasons') or {}).get(k, '')}" for k, v in hp.items()]))
+    return text_pages("Appendix: hyperparameters and their reasons", blocks) if blocks else []
+
+
 def results_pages(a):
+    """One compact table per task: models as rows; label budgets (or metrics) as columns."""
     summ = a["summary"] or {}
     groups = {}
     for name, r in summ.items():
         for k, v in r["metrics"].items():
             parts = k.split(".")
-            if parts[0] == "clustering" or k.endswith(("_accuracy", "chance_foscttm", "median_rank", "n", "n_test", "draws", "n_labeled")):
-                continue
-            if "per_class" in k or "chance_recall" in k or ".per_class." in k:
-                continue
-            groups.setdefault(".".join(parts[:2]), {}).setdefault(name, {})[".".join(parts[2:])] = v
+            if len(parts) >= 3:
+                groups.setdefault(".".join(parts[:2]), {}).setdefault(name, {})[".".join(parts[2:])] = v
+    note = ("Cells: mean ± SD over seeds (no SD: a single run, e.g. a baseline). Held-out test samples. "
+            "Label-draw spread for each run is in its metrics file.")
     blocks = []
     for g, rows in groups.items():
-        lines = []
-        maj = None
-        for name, mets in rows.items():
-            lines.append(f"{name}:")
-            def order(kv):
-                parts = kv[0].split(".")
-                if len(parts) >= 2 and parts[0] == "budgets":
-                    return (0, 10**9 if parts[1] == "all" else int(parts[1]), kv[0])
-                return (1, 0, kv[0])
-            for k, v in sorted(mets.items(), key=order):
-                if k.endswith("_draw_sd"):
-                    continue
-                if k.endswith("majority_macro_f1"):
-                    maj = maj or {}
-                    maj[_plain(k).split(":")[0]] = v["mean"]
-                    continue
-                if any(x in k for x in ("macro_f1", "foscttm", "recall@", "pearson_median", "ari", "nmi")):
-                    dsd = mets.get(f"{k}_draw_sd")
-                    extra = f"  (label-draw SD {dsd['mean']:.4f})" if dsd and dsd["mean"] > 0 else ""
-                    lines.append(f"    {_plain(k):40s} {_ms(v)}{extra}")
-        if maj:
-            lines.append("reference, majority class macro-F1: " + ", ".join(f"{b} {v:.4f}" for b, v in maj.items()))
-        blocks.append((g.replace("_", " ").replace(".", ": "), ["```" + "\n".join(lines) + "```",
-                       "Mean ± SD over seeds (n = seeds); label-draw SD is the spread over the random choice of labeled examples within one run."]))
-    clus = [(n, r["metrics"]) for n, r in summ.items() if any(k.startswith("clustering") for k in r["metrics"])]
-    if clus:
-        blocks.append(("clustering (KMeans on test embeddings)", ["```" + "\n".join(
-            f"{n:28s} " + "  ".join(f"{k.split('.')[-1]} {_ms(v)}" for k, v in m.items() if k.startswith("clustering") and k.endswith(("ari", "nmi")))
-            for n, m in clus) + "```"]))
+        title = g.replace("_", " ").replace(".", ": ")
+        keys = set().union(*[set(m) for m in rows.values()])
+        budgets = sorted({k.split(".")[1] for k in keys if k.startswith("budgets.")},
+                         key=lambda b: 10**9 if b == "all" else int(b))
+        if budgets:
+            paras = []
+            for probe, pname in (("linear_macro_f1", "Linear probe macro-F1"), ("knn_macro_f1", "kNN macro-F1")):
+                trs = [[n] + [_cell(m.get(f"budgets.{b}.{probe}")) for b in budgets] for n, m in rows.items()
+                       if any(f"budgets.{b}.{probe}" in m for b in budgets)]
+                if trs:
+                    hdr = [pname] + ["all" if b == "all" else f"{b}/class" for b in budgets]
+                    paras.append(_table(hdr, trs))
+            any_m = next(iter(rows.values()))
+            maj = [f"{'all' if b == 'all' else b + '/class'} {any_m[f'budgets.{b}.majority_macro_f1']['mean']:.3f}"
+                   for b in budgets if f"budgets.{b}.majority_macro_f1" in any_m]
+            if maj:
+                paras.append("Majority-class macro-F1: " + ", ".join(maj) + ".")
+            blocks.append((title, paras + [note]))
+        else:
+            cols = [c for c in ("foscttm", "recall@1", "recall@10", "recall@50", "median_rank", "pearson_median", "pearson_p25",
+                                "pearson_p75", "ari", "nmi") if c in keys]
+            trs = [[n] + [_cell(m.get(c)) for c in cols] for n, m in rows.items()]
+            chance = [f"{c.replace('chance_', '')} {next(iter(rows.values()))[c]['mean']}" for c in sorted(keys) if c.startswith("chance_")]
+            paras = [_table([title.split(": ")[0]] + cols, trs)]
+            if chance:
+                paras.append("Chance: " + ", ".join(chance) + ".")
+            blocks.append((title, paras + [note]))
     return text_pages("Results (held-out test samples)", blocks)
 
 
@@ -605,7 +627,7 @@ def build(dataset, n, allow_untraced=False):
                 ("Results", results_pages(a)), ("Training and collapse", training_pages(a)), ("Figures", figure_pages(a)),
                 ("Findings", findings_pages(a)), ("Downstream use", recommendation_pages(a)),
                 ("Critique and revision", critique_pages(a)), ("Limitations", limitations_pages(a, untraced)),
-                ("Reproducibility", repro_pages(a, n))]
+                ("Reproducibility", repro_pages(a, n)), ("Appendix: hyperparameters", hyperparameter_pages(a))]
     pages = contents_page(sections, n, dataset)
     for _, figs in sections:
         pages += figs
