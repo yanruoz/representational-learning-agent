@@ -30,7 +30,8 @@ Every choice gets a `reason` and an `evidence` list. Each evidence item names a 
 }
 ```
 
-- Baselines (`single_modality_features`, `frozen_probe`, `linear_supervised`, `linear_alignment`) need `inputs` with `encoder` and `reason` (`frozen_probe` also `evidence`), no loss, no seeds.
+- Baselines (`single_modality_features`, `frozen_probe`, `linear_supervised`, `linear_alignment`) need `inputs` with `encoder` and `reason` (`frozen_probe` also `evidence`) and no loss. `linear_alignment` takes `seeds`: seed 0 fits on all training rows, others on seeded 90% subsamples, so the baseline has a spread to compare against. Give it as many seeds as the learned models.
+- A baseline only produces metrics for tasks whose modalities are among its inputs; plan one per modality the tasks need.
 - Other hyperparameters: `weight_decay`, `dropout`, `temperature_init` (infonce), `supcon_temperature`, `modality_dropout` (autoencoder, fusion), `concat_input`, `max_minutes`. Every key you set needs a reason.
 - `label`: the label a `supcon` / `cross_entropy` model trains on (default: the objective's label task). It is trained once per label budget.
 - `estimated_minutes` per run: small heads on fixed features take well under a minute on CPU for about 10k samples; label-using losses run once per budget, so multiply.

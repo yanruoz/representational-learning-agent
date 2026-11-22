@@ -221,7 +221,7 @@ def train(ctx, entry, seed, budget=None, device_name="auto"):
         "hyperparameters": hp, "device": str(device), "n_train": int(len(tr)), "n_val": int(len(va)),
         "epochs_run": len(history), "stop_reason": stop, "early_stopping": early_stop,
         "best_val_loss": None if best == float("inf") else best,
-        "final_temperature": float(1 / net.logit_scale.exp().clamp(max=100)) if loss_name == "infonce" else None,
+        "final_temperature": (1 / net.logit_scale.detach().exp().clamp(max=100)).item() if loss_name == "infonce" else None,
         "seconds": round(time.time() - t_start, 1), "history": history,
     }
     return emb, record

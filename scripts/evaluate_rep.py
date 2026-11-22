@@ -133,7 +133,7 @@ def prediction_metrics(ctx, Z, task, method, rep_features=None, key=None):
     ref, te = ctx.fit_idx, ctx.test
     if method == "linear_supervised":
         from sklearn.cross_decomposition import PLSRegression
-        Xs = rep_features if rep_features is not None else Z
+        Xs = (rep_features or {}).get(task["source"], Z)
         pls = PLSRegression(n_components=plan_schema.PLS_COMPONENTS, scale=False).fit(Xs[ref], T[ref])
         P, how = pls.predict(Xs[te]), f"PLS regression ({plan_schema.PLS_COMPONENTS} components)"
     else:
@@ -214,8 +214,18 @@ def evaluate(ctx, rep, method, key, only_budget=None, shared_space=None, rep_fea
         m = t.get("modality")
         return rep[m] if m else inference_embedding(ctx, rep)
 
+    def has(t):
+        needed = [t[f] for f in ("modality", "source") if t.get(f)] or (
+            [] if t["task"] in ("cross_modal_retrieval", "label_transfer") else obj["inference_modalities"])
+        missing = [m for m in needed if m not in rep]
+        if missing:
+            out["skipped"].append({"task": t["task"], "label": t.get("label"), "why": f"model has no input for {missing}"})
+        return not missing
+
     for t in obj.get("tasks", []):
         name = t["task"]
+        if not has(t):
+            continue
         if name == "label_prediction":
             Z = emb_for(t)
             budgets = t.get("label_budgets_per_class", [plan_schema.BUDGET_ALL])
@@ -236,7 +246,7 @@ def evaluate(ctx, rep, method, key, only_budget=None, shared_space=None, rep_fea
                 out["tasks"].setdefault("label_transfer", {})[f"{t['from']}->{t['to']}"] = transfer_metrics(ctx, rep, t, budgets, only_budget)
     if only_budget is None:
         for t in obj.get("secondary_tasks", []):
-            if t["task"] == "label_prediction":
+            if t["task"] == "label_prediction" and has(t):
                 out["tasks"].setdefault("secondary_label_prediction", {})[t["label"]] = label_metrics(
                     ctx, emb_for(t), t["label"], t.get("label_budgets_per_class", [plan_schema.BUDGET_ALL]))
     out["collapse"] = {m: collapse(rep[m][ctx.test]) for m in rep}

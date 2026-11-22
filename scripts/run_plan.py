@@ -5,7 +5,9 @@
 
    - Refuses a plan that hasn't passed validate_plan.py (outputs/<d>/plan_validation.json must say
      passed and be newer than plan.json). --allow-unvalidated exists for development only.
-   - Baselines (no trainable weights) run once (key <id>_s0). Trained models run per seed, and
+   - Baselines (no trainable weights) run once (key <id>_s0), except linear_alignment, which runs per
+     seed on a seeded 90% subsample of the training rows so it has a spread like the learned models.
+   - Earlier revisions' run_log / summary / collapse are archived in outputs/<d>/history/revision_<n>/. Trained models run per seed, and
      label-using losses per seed x label budget (key <id>_s<seed>_b<budget>).
    - Reuse: a trained run whose runs/<key>.json config_hash matches and whose embeddings exist is not
      retrained. Evaluation always reruns, so metrics never go stale when evaluation code changes.
@@ -59,7 +61,9 @@ def run_entry(ctx, plan, entry, log):
         log.append({"model_id": entry["id"], "status": entry["status"], "reason": entry.get("reason")})
         return
     jobs = []
-    if method in plan_schema.BASELINE_METHODS:
+    if method == "linear_alignment":
+        jobs = [(s, None) for s in entry.get("seeds", [0])]
+    elif method in plan_schema.BASELINE_METHODS:
         jobs = [(0, None)]
     else:
         uses_labels = entry["loss"] in plan_schema.LOSSES_NEEDING_LABELS
@@ -71,13 +75,13 @@ def run_entry(ctx, plan, entry, log):
         for attempt in (1, 2):
             try:
                 if method in plan_schema.BASELINE_METHODS:
-                    rep, info = baselines.build(ctx, entry)
-                    rec = {"key": key, "model_id": entry["id"], "method": method, "seed": 0, "built": info}
+                    rep, info = baselines.build(ctx, entry, seed)
+                    rec = {"key": key, "model_id": entry["id"], "method": method, "seed": seed, "built": info}
                     (ctx.out / "runs").mkdir(parents=True, exist_ok=True)
                     (ctx.out / "runs" / f"{key}.json").write_text(json.dumps(rec, indent=1) + "\n")
-                    feats = rep[ctx.objective["inference_modalities"][0]] if method == "linear_supervised" else None
-                    evaluate_rep.evaluate(ctx, rep, method, key, shared_space=info["shared_space"], rep_features=feats)
-                    status = "ok"
+                    m_out = evaluate_rep.evaluate(ctx, rep, method, key, shared_space=info["shared_space"],
+                                                  rep_features=rep if method == "linear_supervised" else None)
+                    status = "ok" if m_out["tasks"] else "ok_no_applicable_task"
                 else:
                     chash = train.config_hash(plan, entry, seed, budget)
                     run_path, emb_path = ctx.out / "runs" / f"{key}.json", ctx.out / "embeddings" / f"{key}.npz"
@@ -87,8 +91,8 @@ def run_entry(ctx, plan, entry, log):
                     else:
                         emb, rec = train.train(ctx, entry, seed, budget)
                         train.save(ctx, key, emb, rec, chash)
-                    evaluate_rep.evaluate(ctx, emb, method, key, only_budget=budget)
-                    status = "reused" if reused else "ok"
+                    m_out = evaluate_rep.evaluate(ctx, emb, method, key, only_budget=budget)
+                    status = ("reused" if reused else "ok") if m_out["tasks"] else "ok_no_applicable_task"
                 log.append({"key": key, "model_id": entry["id"], "seed": seed, "budget": budget, "status": status,
                             "attempts": attempt, "seconds": round(time.time() - t0, 1)})
                 print(f"   [{status}] {key} ({time.time() - t0:.1f}s)", flush=True)
@@ -146,6 +150,16 @@ def main():
         if not ok:
             raise SystemExit("ERROR: plan.json has not passed validate_plan.py (run it first)")
     objective = json.loads((out / "objective.json").read_text())
+    old_log = out / "run_log.json"
+    if old_log.exists():  # keep earlier revisions' results instead of overwriting them
+        prev = json.loads(old_log.read_text())
+        if prev.get("plan_revision") != plan.get("revision"):
+            hist = out / "history" / f"revision_{prev.get('plan_revision')}"
+            hist.mkdir(parents=True, exist_ok=True)
+            for f in (old_log, out / "metrics" / "summary.json", out / "metrics" / "collapse.json"):
+                if f.exists():
+                    (hist / f.name).write_text(f.read_text())
+            print(f"[run] archived revision {prev.get('plan_revision')} results in {hist}")
     ctx = context.Context(plan["dataset"], plan, objective)
     log, t0 = [], time.time()
     for entry in plan["models"]:
@@ -157,6 +171,9 @@ def main():
     (out / "run_log.json").write_text(json.dumps({"plan_revision": plan.get("revision"), "minutes": round((time.time() - t0) / 60, 2),
                                                   "runs": log}, indent=1) + "\n")
     failed = [r["key"] for r in log if r.get("status") == "failed"]
+    empty = [r["key"] for r in log if r.get("status") == "ok_no_applicable_task"]
+    if empty:
+        print(f"[run] WARNING: no objective task applies to {empty} (their inputs don't cover any task's modalities)")
     print(f"[run] done in {(time.time() - t0) / 60:.1f} min; {len(log)} runs, {len(failed)} failed {failed}")
 
 
