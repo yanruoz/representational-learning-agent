@@ -89,6 +89,7 @@ The agent makes three real choices per model, each with a `reason` and an `evide
 |---|---|---|---|---|
 | `single_modality_features` (baseline) | no | yes | kNN averaging in its own space | none |
 | `linear_supervised` (baseline) | labels or a target modality | yes | **PLS regression** | logistic regression (labels), PLS (targets) |
+| `linear_alignment` (baseline) | no | yes (one projection per modality) | kNN averaging in the shared space | CCA; number of components chosen on validation |
 | `frozen_probe` | probe only | yes | no | none (cached encoder + kNN / linear probe) |
 | `two_tower` | only with `supcon` | yes (one tower) | kNN averaging in the shared space | `infonce` \| `vicreg` \| `supcon` |
 | `multimodal_autoencoder` | no | with modality dropout | yes (decode the other modality) | reconstruction per modality (MSE, Bernoulli, or negative binomial) |
@@ -167,11 +168,12 @@ Every metric is written next to its baselines (single-modality features, linear 
 
 Full text, intended evaluation, and success criteria are in `docs/OBJECTIVES.md` (the pipeline cannot read it). In short:
 
-- **pbmc_multiome** (report 1): annotate **ATAC-only** cells by cell type and estimate their gene expression, using paired RNA+ATAC for training only. Held-out cells, ATAC as the only input:
-  - kNN macro-F1 vs an ATAC-LSI kNN baseline and logistic regression on ATAC-LSI;
-  - per-gene Pearson on highly variable genes vs kNN-in-ATAC-LSI averaging and PLS (ATAC-LSI → expression).
+- **pbmc_multiome** (report 1, changed Nov 22): **cross-modal matching and label transfer.** RNA-only and ATAC-only cells from separate experiments. Learn a shared space where a cell's RNA and ATAC profiles match, and transfer cell-type labels from RNA to ATAC.
+  - Primary (label-free): FOSCTTM and recall@k on held-out cells vs a CCA baseline (components chosen on validation) and chance.
+  - Secondary: RNA-trained classifier applied to ATAC embeddings vs CCA transfer, with ATAC-alone kNN as an upper reference.
+  - Expression estimation is dropped; its noise ceiling (0.286) goes in the report.
+  - Feasibility check: InfoNCE FOSCTTM 0.015 vs CCA 0.020 vs chance 0.5; recall@10 0.47 vs 0.38; transfer macro-F1 0.88-0.92 vs CCA 0.88 and reference 0.916. Details in `docs/OBJECTIVES.md`.
 
-  Profile evidence: low redundancy (RNA: 4% of cells have a near-duplicate at cosine 0.95; ATAC: none), so `infonce` false negatives are not expected from near-duplicates. The largest class is 27% of cells, though, so same-class negatives are common in any batch. This is a real `infonce` vs `vicreg` choice.
 - **rocov2** (report 2): **body region** from the image alone with **5, 20, 100, or all labeled images per class**; do captions used in training help?
   - Image-only test-set macro-F1 at each budget.
   - Matched pair: frozen DINOv2 vs a DINOv2 image tower aligned to captions. DINOv2 never saw captions, so this comparison is clean.

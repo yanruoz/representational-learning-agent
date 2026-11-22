@@ -13,7 +13,7 @@ Given a multimodal biomedical dataset and a free-text objective, an AI agent (Cl
 From the repo root:
 
 ```
-./run.sh pbmc_multiome "Future samples will be profiled with scATAC-seq only. Using this paired RNA+ATAC data, learn a representation that lets ATAC-only cells be annotated by cell type and have their gene expression estimated, and show how much better that is than working from ATAC alone." --report-number 1
+./run.sh pbmc_multiome "I have cells measured with RNA in one experiment and with ATAC in another. Learn a shared representation where a cell’s RNA and ATAC profiles can be matched, so cell-type annotations can be transferred from RNA-annotated cells to ATAC-only cells. Tell me how well matching works and how accurate the transferred labels are." --report-number 1
 
 ./run.sh rocov2 "Our archive has captions for every radiograph but expert labels for only a few. Learn image representations that identify the body region from the image alone when only a few labeled examples per region are available, and tell me whether using the captions during training helps." --report-number 2
 ```

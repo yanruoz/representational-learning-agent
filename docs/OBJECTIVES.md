@@ -6,14 +6,31 @@ Dev-only. The pipeline cannot read this file (`docs/**` is denied) or `README.md
 
 **Objective (passed verbatim):**
 
-> Future samples will be profiled with scATAC-seq only. Using this paired RNA+ATAC data, learn a representation that lets ATAC-only cells be annotated by cell type and have their gene expression estimated, and show how much better that is than working from ATAC alone.
+> I have cells measured with RNA in one experiment and with ATAC in another. Learn a shared representation where a cell’s RNA and ATAC profiles can be matched, so cell-type annotations can be transferred from RNA-annotated cells to ATAC-only cells. Tell me how well matching works and how accurate the transferred labels are.
 
-**Intended evaluation** (ATAC is the only input for held-out cells; RNA and labels are used in training only):
-- Cell-type annotation: kNN macro-F1 on held-out cells, from the learned ATAC embedding, compared with kNN on an ATAC-LSI baseline (TF-IDF + truncated SVD fit on training cells) and a linear supervised baseline (logistic regression on ATAC-LSI).
-- Expression estimation: per-gene Pearson correlation on highly variable genes (chosen on training cells) between estimated and measured expression in held-out cells. Compared with (a) averaging the expression of the k nearest training cells in ATAC-LSI space and (b) PLS regression from ATAC-LSI to expression.
-- Report the median and the distribution over genes, and the spread over seeds.
+(Changed on Nov 22 from "annotate ATAC-only cells and estimate their expression"; see "Why it changed" below.)
 
-**What should count as success:** the learned representation beats the ATAC-LSI kNN baseline on macro-F1, and beats both expression baselines on median per-gene Pearson, by more than the seed spread. This is plausible because RNA supervises which ATAC differences matter. Risk: ATAC-LSI already separates the major lineages, so gains may show up mainly in the finer T-cell and B-cell subtypes. The per-class F1 should show where the gain comes from. The labels came from a joint RNA+ATAC clustering (see the data description), so the comparison with ATAC-only baselines is somewhat in the learned model's favor.
+**Intended evaluation** (held-out cells; the model trains on paired cells from the training split, and at test time each modality is embedded on its own):
+- **Primary, label-free: matching.** For held-out cells, match each cell's RNA embedding to the ATAC embeddings of all held-out cells (and the reverse). Report FOSCTTM (fraction of samples closer than the true match, averaged over both directions; chance 0.5, lower is better) and recall@1/10/50 (chance k / number of held-out cells). Compare with a linear CCA baseline on PCA (RNA) and LSI (ATAC), its number of components chosen on the validation split, and with chance.
+- **Secondary: label transfer.** Fit a classifier (kNN and linear) on the RNA embeddings of labeled training cells, apply it to the ATAC embeddings of held-out cells, and report macro-F1 and accuracy. Compare with the same transfer through CCA, and with ATAC-alone kNN trained on ATAC labels. That reference uses ATAC labels the scenario does not have, so it is an upper reference, not a baseline to beat.
+- **Caveat to state:** the labels came from a joint RNA+ATAC clustering, so they carry information from both modalities. This affects both sides of the transfer comparison.
+- **Dropped: expression estimation.** The report notes its ceiling: kNN averaging over the test cells' own RNA neighbors gives a median per-gene Pearson of only 0.286, and PLS on ATAC already reaches 0.285, so per-cell noise leaves no room.
+
+**Feasibility check (Nov 22; held-out split of 1,927 cells, 20% stratified, seed 0):**
+
+| Method | FOSCTTM ↓ | recall@10 | recall@50 | Transfer macro-F1 | Transfer accuracy |
+|---|---|---|---|---|---|
+| Chance | 0.5 | 0.0052 | 0.026 | | |
+| CCA, 10 / 20 / 30 components | 0.0231 / 0.0200 / 0.0229 | 0.282 / 0.375 / 0.352 | 0.686 / 0.753 / 0.734 | 0.748 / 0.882 / 0.847 | 0.892 / 0.926 / 0.919 |
+| Two-tower InfoNCE, seeds 0-2 | 0.0150-0.0156 | 0.467-0.476 | 0.819-0.826 | 0.884-0.916 | 0.935-0.940 |
+| Two-tower VICReg, seeds 0-2 | 0.0205-0.0212 | 0.337-0.362 | 0.735-0.754 | 0.882-0.905 | 0.928-0.933 |
+| ATAC-alone kNN (uses ATAC labels) | | | | 0.916 | 0.944 |
+
+Settings: ATAC LSI and RNA PCA inputs, 50 dimensions each; MLP towers [512, 256] → 128; lr 3e-4; early stopping on validation loss.
+
+**What should count as success:** the learned shared space matches held-out cells better than CCA (lower FOSCTTM, higher recall@10) by more than the seed spread. Transferred labels reach macro-F1 close to the ATAC-alone reference. The check above suggests both are met with InfoNCE. VICReg is about level with CCA, which fits the profile evidence that near-duplicates are rare in this data.
+
+**Why it changed.** For ATAC-only annotation, ATAC alone (LSI kNN) already gives macro-F1 0.916, and RNA-guided two-tower models gained only at 5 to 20 labels per class and only with kNN. The linear probe on plain ATAC matched or beat them. Expression estimation was capped by noise (see above). Matching and label transfer is a task where the learned model has clear room over the linear baseline.
 
 ## Report 2: `rocov2`
 
@@ -75,7 +92,7 @@ In DINOv2 space many images sit almost on top of each other, so a DINOv2-based t
 
 What `validate_objective.py` and `validate_plan.py` must enforce for these objectives (implemented generically, never by dataset name):
 - **Label budgets** in `objective.json` are per class (`label_budgets_per_class`, integers plus `"all"`). Each integer budget must be fillable by every retained class's training count after the validation carve-out. Classes that can't fill it must be excluded by the plan, with a reason, or flagged in the report as "budget not filled".
-- **Inference vs training-only modalities.** `inference_modalities` (ATAC; image) and `training_only_modalities` (RNA; caption). No evaluation input may come from a training-only modality, and no metric may use a training-only modality of a test sample.
+- **Inference vs training-only modalities.** `inference_modalities` (PBMC: RNA and ATAC, each embedded on its own at test time; ROCOv2: image) and `training_only_modalities` (ROCOv2: caption). No evaluation input may come from a training-only modality, and no test-time embedding may use another modality of the same test sample (no pairing information at test time).
 - **Label use.** Methods that use labels in representation training (`supcon`, `supervised_fusion`) may use only labels inside the budget being evaluated. Each budget gets its own model.
 - **Training pool.** `plan.json` → `training_pool` (all paired training samples, or only samples with a given label present) has a reason.
 - **Class exclusions.** `plan.json` → `excluded_classes` (e.g. a class under the small-class flag) has a reason that cites the profile counts.
@@ -84,7 +101,7 @@ What `validate_objective.py` and `validate_plan.py` must enforce for these objec
 ## Run commands
 
 ```
-./run.sh pbmc_multiome "Future samples will be profiled with scATAC-seq only. Using this paired RNA+ATAC data, learn a representation that lets ATAC-only cells be annotated by cell type and have their gene expression estimated, and show how much better that is than working from ATAC alone." --report-number 1
+./run.sh pbmc_multiome "I have cells measured with RNA in one experiment and with ATAC in another. Learn a shared representation where a cell’s RNA and ATAC profiles can be matched, so cell-type annotations can be transferred from RNA-annotated cells to ATAC-only cells. Tell me how well matching works and how accurate the transferred labels are." --report-number 1
 
 ./run.sh rocov2 "Our archive has captions for every radiograph but expert labels for only a few. Learn image representations that identify the body region from the image alone when only a few labeled examples per region are available, and tell me whether using the captions during training helps." --report-number 2
 ```
